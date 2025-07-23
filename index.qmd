@@ -8,9 +8,9 @@ editor_options:
 
 ## Librairies
 
-```{r}
-rpkg <- c("dplyr ggplot2 readr boot divvy terra divDyn conflicted CoordinateCleaner 
-          rgplates icosa tidyr tibble purrr downloadthis ggpubr openxlsx")
+```{r message=FALSE}
+rpkg <- c("dplyr ggplot2 readr boot divvy terra divDyn conflicted 
+           icosa tidyr tibble purrr downloadthis ggpubr openxlsx")
 
 import_pkg <- function(x)
   x |> trimws() |> strsplit("\\s+")  |> unlist() |> 
@@ -106,7 +106,7 @@ Data <-
   # Correct family designation.
   mutate(Family = case_when(Genus == "Palaeohypotodus" ~ "Jaekelotodontidae", T ~ Family))
 
-# 51 occurences from Limhamn quarry that needs to be ID.
+# 51 occurrences from the Limhamn quarry that needs to be ID.
 
 # Remove unspecified species.
 remove_obs <- c("Squalicorax sp.","Squalicorax nov. sp. 2","Squalicorax nov. sp. 1",
@@ -122,16 +122,16 @@ remove_obs <- c("Squalicorax sp.","Squalicorax nov. sp. 2","Squalicorax nov. sp.
                 "Abdounia sp.","Woellsteinia sp.","Weltonia sp.","Triakis n. sp.","Squatina sp.","Squaliodalatias sp.",
                 "sp. nov.","sp. nov. A","sp. nov. B", "Hemiscyllium sp.")
 
-Data <- Data |> filter(!Species %in% remove_obs) # Ask Mikael to provide IDs for all Limnhamn specimens. But remove for now.
+Data <- Data |> filter(!Species %in% remove_obs) # Ask Mikael to provide IDs for all Limhamn specimens. But remove for now.
 
-# Final subset (remove occurences with no species identification)
-Data <- 
+# Final subset (remove occurrences with no species identification)
+Data <-
   Data |> 
   filter(!is.na(Species)) |>
   filter(!is.na(Age.3)) |> 
   as.data.frame() |>
   # Remove columns.
-  select(-c("Used","Duplicate","Not_Digitized")) # 2136 occurences with species names.
+  select(-c("Used","Duplicate","Not_Digitized")) # 2346 occurrences with species names.
 
 # Final name corrections.
 Data <- 
@@ -148,10 +148,10 @@ The midpoint of each chronostratigraphic intervals is used here.
 ```{r}
 age_split <- group_split(Data |> group_by(Age.3))
 
-# Get paleocoordinates.
+# Paleocoordinates.
 campan_coords <- reconstruct(x = age_split[[1]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 77.75) # Campanian
 maastr_coords <- reconstruct(x = age_split[[3]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 69)    # Maastrichtian
-danian_coords <- reconstruct(x = age_split[[2]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 62.5)  # Danian/Selandian.
+danian_coords <- reconstruct(x = age_split[[2]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 62.5)  # Danian-Selandian.
 thanet_coords <- reconstruct(x = age_split[[4]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 57.5)  # Thanetian
 
 # Append paleocoordinates.
@@ -167,7 +167,7 @@ spatial_data <-
 ## EDA
 
 ```{r}
-# Number of occurences by country.
+# Number of occurrences by country.
 spatial_data |>
   mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
   mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
@@ -185,7 +185,7 @@ spatial_data |>
         strip.text = element_text(face = "bold")
         )
 
-# Number of occurences by source
+# Number of occurrences by source
 spatial_data |>
   mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
   mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
@@ -202,7 +202,7 @@ spatial_data |>
         strip.text = element_text(face = "bold")
         )
 
-# Number of occurences by order.
+# Number of occurrences by order.
 spatial_data |> 
   mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
   mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
@@ -223,17 +223,17 @@ spatial_data |>
         legend.position = "none",
         aspect.ratio = 1)
 
-# Numer of occurences by species.
+# Number of occurrences by species.
 spatial_data |> 
   mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
   mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
-  group_by(Species) |> 
+  group_by(Species,Order) |> 
   count() |> 
   ggplot(mapping = aes(x = Species, y = n)) +
   geom_bar(stat = "identity") +
   coord_flip() +
   labs(x = NULL, y = "Sample Size") +
-  # facet_wrap(.~ Age.3, scales = "free") +
+  facet_wrap(.~ Order, scales = "free") +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5, size = 8, face = "bold"),
         axis.title = element_text(size = 8,face = "bold"),
@@ -295,7 +295,7 @@ spatial_data |>
   theme(aspect.ratio = 1.5) +
   facet_wrap(.~Age.3,scales = "free",nrow = 1)
 
-# Function used to 1) assign occurences to cells based on age and 2) filter by minimum occurence.
+# Function used to assign occurrences to cells based on geologic-age and filter by minimum occurrence.
 cell_preparation <- function(data,age,hexa,occurrence) {
   # Subset by age.
   data <- data |> filter(Age.3 == age)
@@ -311,10 +311,10 @@ cell_preparation <- function(data,age,hexa,occurrence) {
   # Retained cells.
   cells_to_keep <- unique(data$cell)
   cell_centroids <- 
-    as.data.frame(centers(hexa))[cells_to_keep, , drop = FALSE] |> 
+    as.data.frame(centers(hexa))[cells_to_keep, , drop = FALSE] |> # ask Jood why the coordinates need to be adjusted.
     rownames_to_column(var = "cell")
   
-  # Merge centroids to master-dataframe.
+  # Merge centroid-value to the master data frame.
   data <- data |> left_join(cell_centroids, by = "cell")
   
   return(data)
@@ -368,7 +368,7 @@ spatial_data |>
   theme(aspect.ratio = 1.5)
 ```
 
-## Subsampling by cells and occurence 
+## Subsampling by cells and occurence
 
 The Thanetian has the lowest number of cells (n = 5) whereas the Maastrichtian has the highest (n = 13)
 
@@ -649,4 +649,3 @@ bind_rows(
         legend.title = element_text(face = "bold"),
         aspect.ratio = 1)
 ```
-
