@@ -1,6 +1,11 @@
 ---
 title: "Untitled"
-format: html
+format:
+  html:
+    toc: true
+    toc-location: left
+    number-sections: true
+    code-fold: true
 editor: visual
 editor_options: 
   chunk_output_type: console
@@ -8,8 +13,8 @@ editor_options:
 
 ## Librairies
 
-```{r message=FALSE}
-rpkg <- c("dplyr ggplot2 readr boot divvy terra divDyn conflicted 
+```{r message=FALSE, warning=FALSE}
+rpkg <- c("dplyr ggplot2 readr boot divvy terra divDyn conflicted rgplates sf colorspace rgl
            icosa tidyr tibble purrr downloadthis ggpubr openxlsx")
 
 import_pkg <- function(x)
@@ -25,7 +30,7 @@ conflicted::conflict_prefer(name = "filter", winner = "dplyr",losers = "stats")
 
 ## Occurence data
 
-*Paraorthacodus* is a Hexanchiformes.
+Fossil occurrence data for Late Cretaceous (Campanian-Maastrichtian) and Paleocene (Danian-Thanetian) sharks were compiled using the primary literature and specimens from museum collections. Data processing mainly involved standardizing genus and species spelling. Unspecified species (i.e., sp) were not considered part of the analysis. We performed our analyses at both genus and species levels.The final cleaned occurrence dataset comprised **X** occurrences representing **X** species and **X** genera. Occurrence data were binned into chronostratigraphic ages.
 
 ```{r}
 Data <-
@@ -36,7 +41,7 @@ Data <-
   mutate(Species = as.factor(Species)) |>
   # Synechodontiformes.
   mutate(Species = case_when(Species == "Synechodus cf. faxensis" ~ "Synechodus faxensis",
-                             Species == "Sphenodus cf. lundgreni" ~"Sphenodus lundgreni", TRUE ~ Species)) |> 
+                             Species == "Sphenodus cf. lundgreni" ~ "Sphenodus lundgreni", TRUE ~ Species)) |> 
   # Heterodontiformes.
   mutate(Species = case_when(Species == "Heterodontus granti nov. sp." ~ "Heterodontus granti", TRUE ~ Species)) |> 
   # Squaliformes.
@@ -131,10 +136,10 @@ Data <-
   filter(!is.na(Age.3)) |> 
   as.data.frame() |>
   # Remove columns.
-  select(-c("Used","Duplicate","Not_Digitized")) # 2346 occurrences with species names.
+  select(-c("Used","Duplicate","Not_Digitized")) # 2178 occurrences with species names.
 
 # Final name corrections.
-Data <- 
+Data <-
   Data |> 
   mutate(Genus = case_when(Genus == "Cretolamna" ~ "Cretalamna",TRUE ~ Genus)) |> 
   mutate(Species = case_when(Species == "Isurolamna inflata" ~ "Isurolamna affinis", T ~ Species)
@@ -144,6 +149,7 @@ Data <-
 ## Paleocoordinates
 
 The midpoint of each chronostratigraphic intervals is used here.
+
 
 ```{r}
 age_split <- group_split(Data |> group_by(Age.3))
@@ -175,9 +181,9 @@ spatial_data |>
   count() |> 
   ggplot(mapping = aes(x = Country, y = n, fill = Age.3)) + 
   geom_col() +
-  # scale_fill_manual(values = c("#E6FC7F","#F2FA8C","#FDB462","#FDBF6F")) +
+  scale_fill_manual(values = qualitative_hcl(4, palette = "Dark 3")) +
   coord_flip() +
-  labs(x = NULL, y = "Occurrences", fill = "Chronostratigraphic age") +
+  labs(x = NULL, y = "Number of Occurrences", fill = "Chronostratigraphic age") +
   theme_bw() +
   theme(aspect.ratio = 1,
         axis.text  = element_text(size = 8),
@@ -193,6 +199,7 @@ spatial_data |>
   count() |> 
   ggplot(mapping = aes(x = Source, y = n, fill = Age.3)) + 
   geom_col() +
+  scale_fill_manual(values = qualitative_hcl(4, palette = "Dark 3")) +
   coord_flip() +
   labs(x = NULL, y = "Occurrences", fill = "Chronostratigraphic age") +
   theme_bw() +
@@ -212,8 +219,6 @@ spatial_data |>
   geom_bar(stat = "identity") +
   coord_flip() +
   labs(x = NULL, y = "Sample Size") +
-  # scale_fill_manual(values =  c("#ea801c","#003F5C","#F47","#0d7d87"))+
-  # scale_color_manual(values = c("#ea801c","#003F5C","#F47","#0d7d87")) +
   facet_wrap(.~ Age.3, scales = "free") +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5, size = 8, face = "bold"),
@@ -225,6 +230,26 @@ spatial_data |>
 
 # Number of occurrences by species.
 spatial_data |> 
+  filter(Superorder == "Galeomorphii") |> 
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
+  group_by(Species,Order) |> 
+  count() |> 
+  ggplot(mapping = aes(x = Species, y = n)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(x = NULL, y = "Sample Size") +
+  facet_wrap(.~ Order, scales = "free") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 8, face = "bold"),
+        axis.title = element_text(size = 8,face = "bold"),
+        axis.text = element_text(size = 8),
+        strip.text = element_text(face = "bold"),
+        legend.position = "none",
+        aspect.ratio = 1)
+
+spatial_data |> 
+  filter(Superorder == "Squalomorphii") |> 
   mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
   mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
   group_by(Species,Order) |> 
@@ -245,58 +270,65 @@ spatial_data |>
 
 ## Cells
 
-```{r message=FALSE, warning=FALSE, results='hide'}
-# Set up the grid
-hexa <- hexagrid(deg= 5, sf=TRUE) # a sensititivy test might be required here.
+We first assigned fossil occurrences to equal-area spatial grid cells and retained only those with sufficient sampling (i.e., at a minimum occurrence-level of 20). First, the occurrence data were filtered to include only records from a specified geologic time interval. Each occurrence was then assigned to a spatial grid cell using the `icosa v. 0.11.1` R package and a pre-defined hexagonal equal-area grid object. We calculated the number of occurrences per cell and retained only those with at least a minimum number of records to reduce the influence of undersampled areas. Finally, we extracted the geographic centroids of the retained cells and merged this information back into the dataset to support downstream spatial analysis.
 
-spatial_data <-
+```{r message=FALSE, warning=FALSE, results='hide'}
+# Set up the grid,
+hexa <- hexagrid(deg = 3.5, sf = TRUE) # The mean grid edge length is 403.97 km or 3.63 degrees.
+
+clean_spatial_data <-
   rbind(
-  # Campanian
+  # Campanian.
   spatial_data |> 
   filter(Age.3 == "Campanian") |> 
   mutate(cell = locate(x = hexa,y = spatial_data[spatial_data$Age.3 == "Campanian",] |> select("paleolong", "paleolat"))),
-  # Maastrichtian
+  # Maastrichtian.
   spatial_data |> 
   filter(Age.3 == "Maastrichtian") |> 
   mutate(cell = locate(x = hexa,y = spatial_data[spatial_data$Age.3 == "Maastrichtian",] |> select("paleolong", "paleolat"))), 
-  # Danian/Selandian
+  # Danian/Selandian.
   spatial_data |> 
   filter(Age.3 == "DanSelCombined") |> 
   mutate(cell = locate(x = hexa,y = spatial_data[spatial_data$Age.3 == "DanSelCombined",] |> select("paleolong", "paleolat"))),
-  # Thanetian
+  # Thanetian.
   spatial_data |> 
   filter(Age.3 == "Thanetian") |> 
   mutate(cell = locate(x = hexa,y = spatial_data[spatial_data$Age.3 == "Thanetian",] |> select("paleolong", "paleolat")))
 )
 
 # Count occurrences per cell and age.
-spatial_data |>
-  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","DanSelCombined","Thanetian"))) |> 
+clean_spatial_data |>
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
   group_by(cell,Age.3) |> count() |> 
   ggplot(aes(x = cell, y = n)) +
   geom_col() +
+  geom_hline(yintercept = c(10,15,20,25,30)) + # Minimum number of occurrences.
   theme_bw() +
   theme(aspect.ratio = 1.5) +
   facet_wrap(.~Age.3,scales = "free",nrow = 1)
 
-# spatial_data |>
+#   clean_spatial_data |>
 #   mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","DanSelCombined","Thanetian"))) |> 
 #   group_by(cell,Age.3) |> count() |> 
 #   arrange(desc(n)) |> View()
 
-spatial_data |>
-  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","DanSelCombined","Thanetian"))) |> 
+clean_spatial_data |>
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
   group_by(cell,Age.3) |> count() |> 
   arrange(desc(n)) |>
-  filter(n >= 10) |>
+  filter(n >= 15) |>
   ggplot(aes(x = cell, y = n)) +
   geom_col() +
   theme_bw() +
   theme(aspect.ratio = 1.5) +
   facet_wrap(.~Age.3,scales = "free",nrow = 1)
 
-# Function used to assign occurrences to cells based on geologic-age and filter by minimum occurrence.
-cell_preparation <- function(data,age,hexa,occurrence) {
+# At a minimum occurrences of 15, the interval with least number of cells is the Thanetian (Ncells = 5)
+
+# Function used to filter, spatially bin, and enriching the data with cell metadata.
+cell_preparation <- function(data,age,hexa,min_occ = NULL) {
   # Subset by age.
   data <- data |> filter(Age.3 == age)
   # Assign cell-units based on the coordinates.
@@ -308,10 +340,11 @@ cell_preparation <- function(data,age,hexa,occurrence) {
     mutate(occs = n()) |> 
     ungroup() |> 
     filter(occs >= min_occ)
+  
   # Retained cells.
   cells_to_keep <- unique(data$cell)
   cell_centroids <- 
-    as.data.frame(centers(hexa))[cells_to_keep, , drop = FALSE] |> # ask Jood why the coordinates need to be adjusted.
+    as.data.frame(centers(hexa))[cells_to_keep, , drop = FALSE] |>
     rownames_to_column(var = "cell")
   
   # Merge centroid-value to the master data frame.
@@ -320,57 +353,112 @@ cell_preparation <- function(data,age,hexa,occurrence) {
   return(data)
 }
 
-# Assign cells to coordinate data and remove occurence below the minimum thresh-hold.
-min_occ <- 10
-
-campanian_cells <- cell_preparation(data = spatial_data,age = "Campanian",hexa = hexa,occurrence = min_occ)
-maastrich_cells <- cell_preparation(data = spatial_data,age = "Maastrichtian",hexa = hexa,occurrence = min_occ) 
-daniansel_cells <- cell_preparation(data = spatial_data,age = "DanSelCombined",hexa = hexa,occurrence = min_occ)
-thanetian_cells <- cell_preparation(data = spatial_data,age = "Thanetian",hexa = hexa,occurrence = min_occ)
+# Assign cells to coordinate data and remove occurrence below the minimum thresh-hold.
+campanian_cells <- cell_preparation(data = clean_spatial_data,age = "Campanian",hexa = hexa, min_occ = 15)
+maastrich_cells <- cell_preparation(data = clean_spatial_data,age = "Maastrichtian",hexa = hexa,min_occ = 15) 
+daniansel_cells <- cell_preparation(data = clean_spatial_data,age = "DanSelCombined",hexa = hexa,min_occ = 15)
+thanetian_cells <- cell_preparation(data = clean_spatial_data,age = "Thanetian",hexa = hexa,min_occ = 15)
 
 # Combine all data subsets.
-spatial_data <- bind_rows(campanian_cells,maastrich_cells,daniansel_cells,thanetian_cells) # 2072 specimens in total.
+clean_spatial_data <- bind_rows(campanian_cells,maastrich_cells,daniansel_cells,thanetian_cells) # 2056 specimens in total.
 # Create unique identifier for each cell.
-spatial_data <-
-  data.frame(unique(spatial_data$cell)) |> 
+clean_spatial_data <-
+  data.frame(unique(clean_spatial_data$cell)) |> # 23 unique cells.
   setNames(nm = "cell") |> 
   mutate(cell_id = c(1:length(cell))) |> 
-  inner_join(spatial_data, 
+  inner_join(clean_spatial_data, 
              by = "cell")
 
 # Inspect.
-spatial_data |>
-  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","DanSelCombined","Thanetian"))) |> 
+clean_spatial_data |>
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
   group_by(cell,Age.3) |> count() |> 
   ggplot(aes(x = cell, y = n)) +
   geom_col() +
   theme_bw() +
-  theme(aspect.ratio = 1.5) +
+  theme(aspect.ratio = 1) +
   facet_wrap(.~Age.3,scales = "free",nrow = 1)
 
 # Number of species per age.
-spatial_data |>
-  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","DanSelCombined","Thanetian"))) |> 
+clean_spatial_data |>
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
   group_by(Age.3) |> 
   summarize(n = n_distinct(Species)) |> 
   ggplot(aes(x = Age.3, y = n)) +
   geom_col() +
+  labs(x = "Age", y = "Number of species") +
   theme_bw() +
   theme(aspect.ratio = 1.5)
 
-spatial_data |>
-  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","DanSelCombined","Thanetian"))) |> 
+# Number of genera per age.
+clean_spatial_data |>
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
   group_by(Age.3) |> 
   summarize(n = n_distinct(Genus)) |> 
   ggplot(aes(x = Age.3, y = n)) +
   geom_col() +
+  labs(x = "Age", y = "Number of genera") +
   theme_bw() +
   theme(aspect.ratio = 1.5)
 ```
 
-## Subsampling by cells and occurence
+## Spatial binning
 
-The Thanetian has the lowest number of cells (n = 5) whereas the Maastrichtian has the highest (n = 13)
+```{r}
+unzip(file.path(system.file(package="rgplates"), "extdata/paleomap_v3.zip"), exdir=tempdir())
+pathToPolygons  <- file.path(tempdir(), "PALEOMAP_PlatePolygons.gpml") # static plate polygons
+pathToRotations <- file.path(tempdir(), "PALEOMAP_PlateModel.rot")
+
+pm <- platemodel(
+  features = c("static_polygons" = pathToPolygons),
+  rotation = pathToRotations
+)
+
+# Plot.
+plates_campanian <- reconstruct("static_polygons", age= 77.75, model =pm)  # Campanian
+plates_maastrichtian <- reconstruct("static_polygons", age= 69, model =pm) # Maastrichtian
+plates_danian <- reconstruct("static_polygons", age= 62.5, model =pm)      # Danian
+plates_thanetian <- reconstruct("static_polygons", age= 57.5, model =pm)   # Thanetian
+
+# Transform plates to Mollweide projection.
+
+# Campanian.
+plot(hexa,table(clean_spatial_data[clean_spatial_data$Age.3 == "Campanian",]$cell),
+     crs ="ESRI:54009",
+     border = "lightgrey",
+     reset=FALSE)
+
+plot(sf::st_transform(plates_campanian, "ESRI:54009")$geometry, add = TRUE,border= NA, col = "#66666688")
+
+# Maastrichtian
+plot(hexa,table(clean_spatial_data[clean_spatial_data$Age.3 == "Maastrichtian",]$cell),
+     crs ="ESRI:54009",
+     border = "lightgrey",
+     reset=FALSE)
+
+plot(sf::st_transform(plates_maastrichtian, "ESRI:54009")$geometry, add = TRUE,border= NA, col = "#66666688")
+
+# Danian-Selandian.
+plot(hexa,table(clean_spatial_data[clean_spatial_data$Age.3 == "DanSelCombined",]$cell),
+     crs ="ESRI:54009",
+     border = "lightgrey",
+     reset=FALSE)
+
+plot(sf::st_transform(plates_danian, "ESRI:54009")$geometry, add = TRUE,border= NA, col = "#66666688")
+
+# Thanetian.
+plot(hexa,table(clean_spatial_data[clean_spatial_data$Age.3 == "Thanetian",]$cell),
+     crs ="ESRI:54009",
+     border = "lightgrey",
+     reset=FALSE)
+
+plot(sf::st_transform(plates_thanetian, "ESRI:54009")$geometry, add = TRUE,border= NA, col = "#66666688")
+```
+
+## Subsampling routine
 
 ```{r}
 split_by_age <- function(data, age) {
@@ -380,11 +468,11 @@ split_by_age <- function(data, age) {
     lapply(as.data.frame)
 }
 
-# Data splitting based on cell id and stage.
-campanian_split <- split_by_age(data = spatial_data,age = "Campanian")
-maastrichtian_split <- split_by_age(data = spatial_data,age = "Maastrichtian")
-danian_split <- split_by_age(data = spatial_data,age = "DanSelCombined")
-thanetian_split <- split_by_age(data = spatial_data,age = "Thanetian")
+# Data splitting based on cell-ID and stage.
+campanian_split <- split_by_age(data = clean_spatial_data,age = "Campanian")
+maastrichtian_split <- split_by_age(data = clean_spatial_data,age = "Maastrichtian")
+danian_split <- split_by_age(data = clean_spatial_data,age = "DanSelCombined")
+thanetian_split <- split_by_age(data = clean_spatial_data,age = "Thanetian")
 ```
 
 ```{r}
@@ -398,18 +486,18 @@ boot_age <- function(x, n_boot = NULL, n_strata = NULL, n_per_stratum = NULL) {
 
 # Campanian
 set.seed(1)
-boot_campanian <- boot_age(x = campanian_split,n_boot = 999,n_strata = 5,n_per_stratum = 10)
+boot_campanian <- boot_age(x = campanian_split,n_boot = 999,n_strata = 5,n_per_stratum = 15)
 # Maastrichtian.
 set.seed(2)
-boot_maastrichtian <- boot_age(x = maastrichtian_split,n_boot = 999,n_strata = 5,n_per_stratum = 10)
-# Danian-Selandian
+boot_maastrichtian <- boot_age(x = maastrichtian_split,n_boot = 999,n_strata = 5,n_per_stratum = 15)
+# Danian-Selandian.
 set.seed(3)
-boot_danian <- boot_age(x = danian_split,n_boot = 999,n_strata = 5,n_per_stratum = 10)
+boot_danian <- boot_age(x = danian_split,n_boot = 999,n_strata = 5,n_per_stratum = 15)
 # Thanetian.
 set.seed(4)
-boot_thanetian <- boot_age(x = thanetian_split,n_boot = 999,n_strata = 5,n_per_stratum = 10)
+boot_thanetian <- boot_age(x = thanetian_split,n_boot = 999,n_strata = 5,n_per_stratum = 15)
 
-# Function.
+# Function (explain this)
 combine_boot_lists <- function(x) {
   result <- vector("list", length(x))
   for (i in seq_along(x)) {
@@ -423,7 +511,7 @@ combined_mas <- combine_boot_lists(x = boot_maastrichtian)
 combined_dan <- combine_boot_lists(x = boot_danian)
 combined_tha <- combine_boot_lists(x = boot_thanetian)
 
-
+# Functions.
 species_occurence_cell <- function(combined_data) {
  purrr::map(combined_data, ~ .x |> group_by(cell,Species) |> summarise(occs = n(), .groups = 'drop')) |> 
   lapply(as.data.frame) |> 
@@ -441,7 +529,7 @@ maas_count <- species_occurence_cell(combined_mas)
 dani_count <- species_occurence_cell(combined_dan)
 than_count <- species_occurence_cell(combined_tha)
 
-# Next
+# Determine the number of unique cells.
 distinct_cells <- function(data) {
   tibble(unique(data$cell)) |> setNames(nm = "x") |> 
   mutate(n_part = as.numeric(sub("F", "", x))) |> 
@@ -477,7 +565,9 @@ jaccard_similarity <- function(x) {
   
   # Unique cells.
   unique_cells <- unique(x[[k]]$cell)
-  jaccard_similarity_table <- data.frame(cell_x = character(), cell_y = character(), jaccard_similarity = numeric(), stringsAsFactors = F)
+  jaccard_similarity_table <- data.frame(cell_x = character(), cell_y = character(),
+                                         jaccard_similarity = numeric(),
+                                         stringsAsFactors = F)
   
   for (i in 1:length(unique_cells)) {
     cell_x <- unique_cells[i]
@@ -499,7 +589,8 @@ jaccard_similarity <- function(x) {
       Un <- length(generics::union(unique_names_cell_x, unique_names_cell_y))
       jaccard_similarity <- intersection/Un
       # Combine results.
-      jaccard_similarity_table <- rbind(jaccard_similarity_table, data.frame(cell_x = cell_x, cell_y = cell_y, jaccard_similarity = jaccard_similarity))
+      jaccard_similarity_table <- rbind(jaccard_similarity_table, data.frame(cell_x = cell_x, cell_y = cell_y, 
+                                                                             jaccard_similarity = jaccard_similarity))
     }
   }
   
@@ -510,17 +601,13 @@ jaccard_similarity <- function(x) {
 }
 
 # Campanian.
-cmp_jaccard <- 
-  jaccard_similarity(x = combined_cam)
+cmp_jaccard <- jaccard_similarity(x = combined_cam)
 # Maastrichtian.
-mas_jaccard <- 
-  jaccard_similarity(combined_mas)
+mas_jaccard <- jaccard_similarity(combined_mas)
 # Danian/Selandian.
-dan_jaccard <- 
-  jaccard_similarity(combined_dan)
+dan_jaccard <- jaccard_similarity(combined_dan)
 # Thanetian.
-tha_jaccard <- 
-  jaccard_similarity(combined_tha)
+tha_jaccard <- jaccard_similarity(combined_tha)
 
 # Average similarity for each cell-pair and stage.
 mean_jaccard <- function(x) {
@@ -553,12 +640,12 @@ gcd.slc <- function(long1, lat1, long2, lat2) {
 # Function.
 matrix_results <- function(x) {
   x |> 
-  # X-coordinates
-  left_join(spatial_data |> select(cell,long,lat), by = c("x" = "cell"),relationship = "many-to-many") |> 
+  # X-coordinates.
+  left_join(clean_spatial_data |> select(cell,long,lat), by = c("x" = "cell"),relationship = "many-to-many") |> 
   distinct(x,y,long,lat) |> 
   rename("x_long" = "long","x_lat" = "lat") |> 
-  # Y-coordinates
-  left_join(spatial_data |> select(cell,long,lat), by = c("y" = "cell"),relationship = "many-to-many") |> 
+  # Y-coordinates.
+  left_join(clean_spatial_data |> select(cell,long,lat), by = c("y" = "cell"),relationship = "many-to-many") |> 
   distinct(x,y,x_long,x_lat,long,lat) |> 
   # Rename variables.
   rename("y_long" = "long","y_lat" = "lat") |> 
@@ -609,13 +696,13 @@ summary_statistics <- function(x) {
   x |> 
   group_by(cutdist) |> 
   summarise(
-    # Jaccard
+    # Jaccard.
     avg =  mean(avg_jaccard, na.rm = TRUE),
     sdev = sd(avg_jaccard, na.rm = TRUE),
     n = n(),
     se = sdev/sqrt(n),
-    # Quantiles
-    first = quantile(avg_jaccard,probs=0.05, na.rm= TRUE),
+    # Quantiles.
+    first =  quantile(avg_jaccard,probs=0.05, na.rm = TRUE),
     second = quantile(avg_jaccard,probs=0.95, na.rm = TRUE)
   ) |> 
   mutate(cutdist = cutdist,
@@ -635,8 +722,8 @@ bind_rows(
 # Plot.
   ggplot(aes(x = cutdist, y = avg, group = label, colour = label, fill = label)) +
   geom_errorbar(aes(ymin = second, ymax = first), width = 0.05, linewidth = 1, position = position_dodge(width = 0.3)) + 
-  geom_line(linewidth = 1.2, position = position_dodge(width = 0.3)) +
-  ylim(0, 0.3) +
+  geom_line(linewidth = 1, position = position_dodge(width = 0.3)) +
+  # ylim(0, 0.3) +
   scale_size_continuous(breaks = c(5, 10, 15, 20, 25, 30)) +
   geom_point(aes(size = n), shape = 23, fill = "white", stroke = 2, position = position_dodge(width = 0.3)) +
   labs(x = "Great Circle Distance (km)", 
@@ -648,4 +735,51 @@ bind_rows(
         axis.title = element_text(face = "bold"),
         legend.title = element_text(face = "bold"),
         aspect.ratio = 1)
+
+# Combine and label summary data
+summary_data <- bind_rows(
+  summary_statistics(x = cmp_binned) |> mutate(Stage = "Campanian"),
+  summary_statistics(x = mas_binned) |> mutate(Stage = "Maastrichtian"),
+  summary_statistics(x = dan_binned) |> mutate(Stage = "Danian"),
+  summary_statistics(x = tha_binned) |> mutate(Stage = "Thanetian")
+) |> 
+  mutate(Stage = factor(Stage, levels = c("Campanian", "Maastrichtian", "Danian", "Thanetian")))
+
+# Plot
+ggplot(summary_data, aes(x = cutdist, y = avg, group = Stage, colour = Stage, fill = Stage)) +
+  # Error bars
+  geom_errorbar(
+    aes(ymin = second, ymax = first),
+    width = 0.05,
+    linewidth = 0.8,
+    position = position_dodge(width = 0.3)
+  ) +
+  # Line trend
+  geom_line(linewidth = 1, position = position_dodge(width = 0.3)) +
+  # Points (sized by comparisons)
+  geom_point(
+    aes(size = n),
+    shape = 21,
+    fill = "white",
+    stroke = 1.5,
+    position = position_dodge(width = 0.3)
+  ) +
+  # Labels and scales
+  scale_size_continuous(name = "Number of cell-pair comparisons", breaks = c(5, 10, 15, 20, 25, 30)) +
+  labs(
+    x = "Great Circle Distance (km)",
+    y = "Jaccard Similarity",
+    title = "Distance Decay of Similarity",
+    subtitle = "Subsampled by cells and occurrences",
+    colour = "Stage"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    axis.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right",
+    aspect.ratio = 1
+  )
+
 ```
