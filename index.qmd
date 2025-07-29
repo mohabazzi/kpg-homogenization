@@ -9,6 +9,7 @@ format:
     highlight-style: pygments
     fig-cap-location: top
     lightbox: auto
+    embed-resources: true
 editor: visual
 editor_options: 
   chunk_output_type: console
