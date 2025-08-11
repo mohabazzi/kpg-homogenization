@@ -1,31 +1,57 @@
 ---
-title: "Title"
-author:   
-  - Mohamad Bazzi   
-  - Mikael Siversson
-  - Jood Al Aswad
-  - Ashley Nicole Prow-Fleischer
-  - Jonathan L. Payne
+title: "Increased cosmopolitanism in sharks in the wake of the end-Cretaceous mass extinction event "
+title-block-banner: "#2E2D29"
+title-block-banner-color: "#FFFFFF"
+subtitle: "Supplementary Data:"
+description: "Stanford Doer School of Sustainability, Paleobiology Lab"
+date: last-modified
+date-format: "YYYY-MM-DD"
+mainfont: Figtree
+sansfont: Georgia
+footnotes-hover: true
+reference-location: margin
+lang: en
+search: true
+number-sections: false
+crossref:
+  chapters: true
+author:
+  - name: Mohamad Bazzi
+    orcid: 0000-0002-9495-0781
+    email: bazzi@stanford.edu
+    url: https://github.com/mohabazzi
+    affiliations:
+      - name: Stanford University
+        department: Department of Earth and Planetary Sciences
+        address: CA 94305
+        country: USA
+        url: https://sustainability.stanford.edu/
+highlight-style: pygments
+fig-cap-location: top
+lightbox: auto
 format:
-  html:
-    toc: true
-    toc-location: left
-    number-sections: true
-    code-fold: true
-    highlight-style: pygments
-    fig-cap-location: top
-    lightbox: auto
-    embed-resources: true
-editor: visual
+  stanford-quarto-html: default
+other-links:
+  - text: Custom Quarto Template
+    icon: file-code
+    href: https://github.com/mohabazzi/stanford-quarto
+  - text: Docker image
+    icon: file-code
+    href: https://hub.docker.com/r/mohamadbazzi/aptian-image
+code-links:
+  - text: Github Repo
+    icon: github
+    href: https://github.com/mohabazzi/kpg-homogenization
 editor_options: 
   chunk_output_type: console
 ---
 
-## Librairies
+## Libraries
 
 ```{r message=FALSE, warning=FALSE}
-rpkg <- c("dplyr ggplot2 readr boot divvy terra divDyn conflicted rgplates sf colorspace rgl
-           icosa tidyr tibble purrr downloadthis ggpubr openxlsx igraph Matrix")
+rpkg <- c("dplyr ggplot2 readr boot divvy terra divDyn conflicted rgplates sf colorspace rgl RColorBrewer
+           icosa tidyr tibble purrr downloadthis ggpubr openxlsx igraph Matrix RColorBrewer bipartite
+           betapart rnaturalearth dispeRse")
 
 import_pkg <- function(x)
   x |> trimws() |> strsplit("\\s+")  |> unlist() |> 
@@ -36,14 +62,16 @@ rpkg |> import_pkg()
 
 # Resolve conflicted functions.
 conflicted::conflict_prefer(name = "filter", winner = "dplyr",losers = "stats")
+conflicted::conflicts_prefer(base::attr)
+conflicted::conflicts_prefer(rgplates::reconstruct)
 ```
 
-## Occurence data
+## Paleontological occurrence data
 
-Fossil occurrence data for Late Cretaceous (Campanian-Maastrichtian) and Paleocene (Danian-Thanetian) sharks were compiled using the primary literature and specimens from museum collections. Data processing mainly involved standardizing genus and species spelling. Unspecified species (i.e., sp) were not considered part of the analysis. We performed our analyses at both genus and species levels.The final cleaned occurrence dataset comprised **X** occurrences representing **X** species and **X** genera. Occurrence data were binned into chronostratigraphic ages.
+Fossil occurrence data for Late Cretaceous (Campanian-Maastrichtian) and Paleocene (Danian-Thanetian) sharks were compiled using the primary literature and specimens from museum collections. Data processing mainly involved standardizing genus and species spelling, but also updating nomenclature were appropriate. Unspecified species (i.e., sp) were not considered part of the analysis. We performed our analyses at both genus and species levels.The final cleaned occurrence dataset comprised **X** occurrences representing **X** species and **X** genera. Occurrence data were binned into chronostratigraphic ages.
 
 ```{r}
-# Database.
+# Occurrence Database.
 Data <-
   read.xlsx(xlsxFile = "Data.xlsx") |> 
   filter(!Duplicate %in% c("x")) |> 
@@ -125,7 +153,10 @@ Data <-
                              Species %in% c("‘Scyliorhinus’ biddlei", "“Scyliorhinus“ biddlei") ~ "Scyliorhinus biddlei",
                              Species %in% c("‘Scyliorhinus’ elongatus","“Scyliorhinus” elongatus") ~  "Scyliorhinus elongatus", T ~  Species)) |>
   # Correct family designation.
-  mutate(Family = case_when(Genus == "Palaeohypotodus" ~ "Jaekelotodontidae", T ~ Family))
+  mutate(Family = case_when(Genus == "Palaeohypotodus" ~ "Jaekelotodontidae", T ~ Family)) |> 
+  # Correct genus.
+  mutate(Genus = case_when(Genus == "Cretolamna" ~ "Cretalamna",
+                           Genus == "Paraorthocodus" ~ "Paraorthacodus", T ~ Genus))
 
 # 51 occurrences from the Limhamn quarry that needs to be ID.
 
@@ -143,7 +174,7 @@ remove_obs <- c("Squalicorax sp.","Squalicorax nov. sp. 2","Squalicorax nov. sp.
                 "Abdounia sp.","Woellsteinia sp.","Weltonia sp.","Triakis n. sp.","Squatina sp.","Squaliodalatias sp.",
                 "sp. nov.","sp. nov. A","sp. nov. B", "Hemiscyllium sp.")
 
-Data <- Data |> filter(!Species %in% remove_obs) # Ask Mikael to provide IDs for all Limhamn specimens. But remove for now.
+Data <- Data |> filter(!Species %in% remove_obs)
 
 # Final subset (remove occurrences with no species identification)
 Data <-
@@ -153,12 +184,11 @@ Data <-
   # Remove invalid taxa.
   filter(!Species %in% c("Palaeohypotodus rutori")) |>  # Not valid according (Ebersole et al. 2024).
   # Final corrections.
-  mutate(Genus = case_when(Genus == "Cretolamna" ~ "Cretalamna",TRUE ~ Genus)) |> 
   mutate(Species = case_when(Species == "Isurolamna inflata" ~ "Isurolamna affinis", T ~ Species)
          ) |>  # (see Popov and Vladimir A. Lopyrev 2024).
   as.data.frame() |>
   # Remove columns.
-  select(-c("Used","Duplicate","Not_Digitized")) # 2206 occurrences with species names.
+  select(-c("Used","Duplicate","Not_Digitized","Age.2","Age.PD")) # 2381 occurrences with species names.
 ```
 
 ## Paleocoordinates
@@ -166,13 +196,16 @@ Data <-
 We used the present-day coordinates (i.e. latitude and longitude) of fossil localities/areas to reconstruct their corresponding paleocoordinates. This was achieved using the `rgplates` v. 0.6.0 R package and we opted to use the midpoint of each chronostratigraphic intervals.
 
 ```{r}
-age_split <- group_split(Data |> group_by(Age.3))
+age_split <- 
+  Data |> 
+  group_by(Age.3) |> 
+  group_split()
 
 # Paleocoordinates.
-campan_coords <- reconstruct(x = age_split[[1]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 77.75) # Campanian
-maastr_coords <- reconstruct(x = age_split[[3]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 69)    # Maastrichtian
-danian_coords <- reconstruct(x = age_split[[2]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 62.5)  # Danian-Selandian.
-thanet_coords <- reconstruct(x = age_split[[4]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 57.5)  # Thanetian
+campan_coords <- reconstruct(x = age_split[[1]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 77.9)  # Campanian
+maastr_coords <- reconstruct(x = age_split[[3]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 69.1)  # Maastrichtian
+danian_coords <- reconstruct(x = age_split[[2]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 62.62) # Danian-Selandian.
+thanet_coords <- reconstruct(x = age_split[[4]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 57.62) # Thanetian
 
 # Append paleocoordinates.
 spatial_data <-
@@ -203,11 +236,10 @@ spatial_data |>
   count() |> 
   ggplot(mapping = aes(x = Country, y = n, fill = Age.3)) + 
   geom_col() +
-  # scale_fill_manual(values = qualitative_hcl(4, palette = "Dark 3")) +
-  scale_fill_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
+  scale_fill_manual(values =   c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
   scale_colour_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
   coord_flip() +
-  labs(x = NULL, y = "Number of Occurrences", fill = "Chronostratigraphic age") +
+  labs(x = NULL, y = "Sample size", fill = "Chronostratigraphic age", title = "Fossil occurrences by country") +
   theme_bw() +
   theme(panel.grid=element_line(linetype=3,linewidth=0.2, 
                                 color='gray50'),
@@ -216,6 +248,7 @@ spatial_data |>
         strip.text=element_text(hjust=0,face = "bold"),
         aspect.ratio = 1,
         axis.text  = element_text(size = 8),
+        plot.title = element_text(face = "bold"),
         axis.title = element_text(face = "bold"))
 
 # Number of occurrences by source.
@@ -223,17 +256,22 @@ spatial_data |>
   mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
   mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
   # Add new column (source type)
-  mutate(source_type = NULL) |>
-  mutate(source_type = "Literature") |> 
-  mutate(source_type = case_when(Source == "WAM Collection" ~ "Museum collection",T ~ source_type)) |> 
-  group_by(Source,Age.3,source_type) |> 
+  # mutate(source_type = NULL) |>
+  # mutate(source_type = "Literature") |> 
+  # mutate(source_type = case_when(Source %in% c("WAM Collection","AMNH Collection","D. Ward collection") ~ "Museum collection",T ~ source_type)) |> 
+  mutate(Source = case_when(Source == "D. Ward collection" ~ "NHM Collection", T ~ Source)) |> 
+  mutate(Source = factor(Source, levels = c("WAM Collection","AMNH Collection","NHM Collection", 
+                                             setdiff(sort(unique(Source)), c("WAM Collection","AMNH Collection","NHM Collection"))))) |> 
+  group_by(Source,Age.3) |> 
   count() |> 
   ggplot(mapping = aes(x = Source, y = n, fill = Age.3)) + 
   geom_col() +
-  scale_fill_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
+  scale_fill_manual(values =   c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
   scale_colour_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
   coord_flip() +
-  labs(x = NULL, y = "Occurrences", fill = "Chronostratigraphic age") +
+  geom_vline(xintercept = 3.5) +
+  labs(x = NULL, y = "Sample size", fill = "Chronostratigraphic age",title = "Fossil occurrences by source type",
+       subtitle = "Collections vs. Literature") +
   theme_bw() +
   theme(panel.grid=element_line(linetype=3,linewidth=0.2, 
                                 color='gray50'),
@@ -242,6 +280,7 @@ spatial_data |>
         strip.text=element_text(hjust=0,face = "bold"),
         aspect.ratio = 1.5,
         axis.text  = element_text(size = 6),
+        plot.title = element_text(face = "bold"),
         axis.title = element_text(face = "bold"))
 
 # Number of occurrences by order.
@@ -253,17 +292,20 @@ spatial_data |>
   ggplot(mapping = aes(x = Order, y = n, fill = Order)) +
   geom_bar(stat = "identity") +
   coord_flip() +
-  labs(x = NULL, y = "Sample Size") +
+  labs(x = NULL, y = "Sample size",title = "Fossil occurrences by taxonomic hierarchy",subtitle = "Selachian orders") +
   facet_wrap(.~ Age.3, scales = "free") +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5, size = 8, face = "bold"),
-        axis.title = element_text(size = 8,face = "bold"),
-        axis.text = element_text(size = 8),
-        strip.text = element_text(face = "bold"),
-        legend.position = "none",
-        aspect.ratio = 1)
+  theme_bw() +
+  theme(panel.grid=element_line(linetype=3,linewidth=0.2, 
+                                color='gray50'),
+        panel.grid.minor=element_blank(),
+        strip.background=element_blank(),
+        strip.text=element_text(hjust=0,face = "bold"),
+        aspect.ratio = 1.5,
+        axis.text  = element_text(size = 6),
+        plot.title = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"))
 
-# Number of occurrences by species (divide into two plots)
+# Number of occurrences by species.
 spatial_data |> 
   filter(Superorder == "Galeomorphii") |> 
   filter(Order %in% c("Lamniformes","Carcharhiniformes")) |> 
@@ -274,7 +316,7 @@ spatial_data |>
   count() |> 
   ggplot(mapping = aes(x = Species, y = n, fill = Age.3)) +
   geom_bar(stat = "identity") +
-  scale_fill_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
+  scale_fill_manual(values =   c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
   scale_colour_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
   coord_flip() +
   labs(x = NULL, y = "Sample Size", fill = "Chronostratigraphic age") +
@@ -288,6 +330,8 @@ spatial_data |>
         legend.position = "bottom",
         legend.text = element_text(size = 6),
         legend.title = element_text(size = 6),
+        legend.key.width =  unit(3, "mm"),
+        legend.key.height = unit(3, "mm"),
         aspect.ratio = 1.5)
 
 spatial_data |> 
@@ -300,7 +344,7 @@ spatial_data |>
   count() |> 
   ggplot(mapping = aes(x = Species, y = n, fill = Age.3)) +
   geom_bar(stat = "identity") +
-  scale_fill_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
+  scale_fill_manual(values =   c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
   scale_colour_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) + 
   coord_flip() +
   labs(x = NULL, y = "Sample Size") +
@@ -314,6 +358,8 @@ spatial_data |>
         legend.position = "bottom",
         legend.text = element_text(size = 6),
         legend.title = element_text(size = 6),
+        legend.key.width =  unit(3, "mm"),
+        legend.key.height = unit(3, "mm"),
         aspect.ratio = 1.5)
 
 spatial_data |> 
@@ -326,7 +372,7 @@ spatial_data |>
   count() |> 
   ggplot(mapping = aes(x = Species, y = n, fill = Age.3)) +
   geom_bar(stat = "identity") +
-  scale_fill_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
+  scale_fill_manual(values =   c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
   scale_colour_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) + 
   coord_flip() +
   labs(x = NULL, y = "Sample Size") +
@@ -340,14 +386,74 @@ spatial_data |>
         legend.position = "bottom",
         legend.text = element_text(size = 6),
         legend.title = element_text(size = 6),
+        legend.key.width =  unit(3, "mm"),
+        legend.key.height = unit(3, "mm"),
         aspect.ratio = 1.5)
+```
+
+## North America
+
+```{r}
+# Plot data.
+ne_countries(continent = "North America", returnclass = "sf") |> 
+ggplot() +
+  geom_sf(fill = "#FFFBED") +
+  theme(panel.background = element_blank()) +
+  geom_point(
+    data = 
+      Data |> 
+      filter(Continent == "North America") |> 
+      # filter(Country == "U.S.A") |> 
+      mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","DanSelCombined","Thanetian"))),
+    aes(x = Longitude, y = Latitude, group = NULL, color = Age.3),shape = 19,size = 3.5) +
+  scale_fill_manual(values =   c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
+  scale_colour_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
+  theme(panel.background = element_rect(fill = "aliceblue"),
+        legend.position = 'bottom')
+
+# Create a separate cell-grid division for North American occurrences. Will serve as a sensitivity test.
+north_america_hexa <- hexagrid(deg = 1, sf = TRUE)
+
+# North America Data
+north_america_data <-
+  rbind(
+  # Campanian.
+  spatial_data |>
+  filter(Age.3 == "Campanian" & Continent == "North America") |> 
+  mutate(cell = locate(x = north_america_hexa,
+                       y = spatial_data |> filter(Age.3 == "Campanian" & Continent == "North America") |> select("paleolong", "paleolat"))),
+  # Maastrichtian.
+  spatial_data |> 
+  filter(Age.3 == "Maastrichtian" & Continent == "North America") |> 
+  mutate(cell = locate(x = north_america_hexa,
+                       y = spatial_data |> filter(Age.3 == "Maastrichtian" & Continent == "North America")  |> select("paleolong", "paleolat"))), 
+  # Danian/Selandian.
+  spatial_data |> 
+  filter(Age.3 == "DanSelCombined" & Continent == "North America") |> 
+  mutate(cell = locate(x = north_america_hexa,
+                       y = spatial_data |> filter(Age.3 == "DanSelCombined" & Continent == "North America")  |> select("paleolong", "paleolat"))),
+  # Thanetian.
+  spatial_data |> 
+  filter(Age.3 == "Thanetian" & Continent == "North America") |> 
+  mutate(cell = locate(x = north_america_hexa,
+                       y = spatial_data |> filter(Age.3 == "Thanetian" & Continent == "North America")  |> select("paleolong", "paleolat")))
+)
+
+nrow(north_america_data) # 739
+
+north_america_data |> 
+  group_by(Age.3,cell) |> 
+  count() |> 
+  ggplot(aes(x = cell, y = n)) +
+  geom_col() +
+  facet_wrap(.~ Age.3, scales = "free", nrow = 1) +
+  theme(aspect.ratio = 1.5)
+
 ```
 
 ## Cells
 
-We first assigned fossil occurrences to equal-area spatial grid cells and retained only those with sufficient sampling (i.e., at a minimum occurrence-level of 20). First, the occurrence data were filtered to include only records from a specified geologic time-interval. Each occurrence was then assigned to a spatial grid cell using the `icosa v. 0.11.1` R package and a pre-defined hexagonal equal-area grid object. We calculated the number of occurrences per cell and retained only those with at least a minimum number of records to reduce the influence of undersampled areas. Finally, we extracted the geographic centroids of the retained cells and merged this information back into the dataset to support downstream spatial analysis.
-
-At a minimum occurrences of 15, the interval with least number of cells is the Thanetian.
+We first assigned fossil occurrences to equal-area spatial grid cells and retained only those with sufficient sampling (i.e., at a minimum occurrence-level of 10). First, the occurrence data were filtered to include only records from a specified geologic time-interval. Each occurrence was then assigned to a spatial grid cell using the `icosa v. 0.11.1` R package and a pre-defined hexagonal equal-area grid object. We calculated the number of occurrences per cell and retained only those with at least a minimum number of records to reduce the influence of undersampled areas. Finally, we extracted the geographic centroids of the retained cells and merged this information back into the dataset to support downstream spatial analysis.
 
 ```{r message=FALSE, warning=FALSE, results='hide'}
 # Set up the grid,
@@ -373,6 +479,7 @@ clean_spatial_data <-
   mutate(cell = locate(x = hexa,y = spatial_data[spatial_data$Age.3 == "Thanetian",] |> select("paleolong", "paleolat")))
 )
 
+
 # Count occurrences per cell and age.
 clean_spatial_data |>
   mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
@@ -380,7 +487,8 @@ clean_spatial_data |>
   group_by(cell,Age.3) |> count() |> 
   ggplot(aes(x = cell, y = n)) +
   geom_col() +
-  facet_wrap(.~Age.3,scales = "free",nrow = 1) +
+  labs(x = NULL, y = "Number of occurrences") +
+  facet_wrap(.~Age.3,scales = "free",nrow = 2) +
   theme_bw() +
   theme(aspect.ratio = 1.5,
         panel.grid=element_line(linetype=3,linewidth=0.2),
@@ -395,14 +503,15 @@ clean_spatial_data |>
   mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
   group_by(cell,Age.3) |> count() |> 
   arrange(desc(n)) |>
-  filter(n >= 15) |>
+  filter(n >= 10) |> # Run sensitivity test here.
   ggplot(aes(x = cell, y = n)) +
   geom_col() +
-  geom_hline(yintercept = 15,colour = "#D83853") +
-  labs(x = NULL, y = "Number of occurrences") +
-  facet_wrap(.~Age.3,scales = "free",nrow = 1) +
+  geom_hline(yintercept = 10,colour = "#D83853") +
+  labs(x = NULL, y = "Number of occurrences",title = "Minimum quota for sampling per cell",subtitle = "10 occurrences") +
+  facet_wrap(.~Age.3,scales = "free",nrow = 2) +
   theme_bw() +
   theme(aspect.ratio = 1.5,
+        plot.title = element_text(face = "bold"),
         panel.grid=element_line(linetype=3,linewidth=0.2, 
                                 color='#53565A'),
         panel.grid.minor=element_blank(),
@@ -410,7 +519,7 @@ clean_spatial_data |>
         strip.text=element_text(hjust=0)
         )
 
-# Function used to filter, spatially bin, and enriching the data with cell metadata.
+# Filter and spatially bin the data.
 cell_preparation <- function(data,age,hexa,min_occ = NULL) {
   # Subset by age.
   data <- data |> filter(Age.3 == age)
@@ -437,39 +546,20 @@ cell_preparation <- function(data,age,hexa,min_occ = NULL) {
 }
 
 # Cell assignment and remove occurrence below the minimum thresh-hold.
-campanian_cells <- cell_preparation(data = clean_spatial_data,age = "Campanian",hexa = hexa, min_occ = 15)
-maastrich_cells <- cell_preparation(data = clean_spatial_data,age = "Maastrichtian",hexa = hexa,min_occ = 15) 
-daniansel_cells <- cell_preparation(data = clean_spatial_data,age = "DanSelCombined",hexa = hexa,min_occ = 15)
-thanetian_cells <- cell_preparation(data = clean_spatial_data,age = "Thanetian",hexa = hexa,min_occ = 15)
+campanian_cells <- cell_preparation(data = clean_spatial_data,age = "Campanian",hexa = hexa, min_occ = 10)
+maastrich_cells <- cell_preparation(data = clean_spatial_data,age = "Maastrichtian",hexa = hexa,min_occ = 10) 
+daniansel_cells <- cell_preparation(data = clean_spatial_data,age = "DanSelCombined",hexa = hexa,min_occ = 10)
+thanetian_cells <- cell_preparation(data = clean_spatial_data,age = "Thanetian",hexa = hexa,min_occ = 10)
 
 # Combine all data subsets.
-clean_spatial_data <- bind_rows(campanian_cells,maastrich_cells,daniansel_cells,thanetian_cells) # 2071 specimens in total.
+clean_spatial_data <- bind_rows(campanian_cells,maastrich_cells,daniansel_cells,thanetian_cells) # 2302 specimens in total.
 # Create unique identifier for each cell.
 clean_spatial_data <-
-  data.frame(unique(clean_spatial_data$cell)) |> # 24 unique cells.
+  data.frame(unique(clean_spatial_data$cell)) |> # 29 unique cells.
   setNames(nm = "cell") |> 
   mutate(cell_id = c(1:length(cell))) |> 
   inner_join(clean_spatial_data, 
              by = "cell")
-
-# Inspect.
-clean_spatial_data |>
-  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
-  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
-  group_by(cell,Age.3) |> count() |> 
-  ggplot(aes(x = cell, y = n)) +
-  geom_col() +
-  geom_hline(yintercept = 15,colour = "#D83853") +
-  labs(x = NULL, y = "Number of occurrences") +
-  facet_wrap(.~Age.3,scales = "free",nrow = 1) +
-  theme_bw() +
-  theme(aspect.ratio = 1.5,
-        panel.grid=element_line(linetype=3,linewidth=0.2, 
-                                color='#53565A'),
-        panel.grid.minor=element_blank(),
-        strip.background=element_blank(),
-        strip.text=element_text(hjust=0)
-        )
 
 # Number of species per age.
 clean_spatial_data |>
@@ -479,9 +569,10 @@ clean_spatial_data |>
   summarize(n = n_distinct(Species)) |> 
   ggplot(aes(x = Age.3, y = n)) +
   geom_col() +
-  labs(x = "Age", y = "Number of species") +
+  labs(x = "Age", y = "Number of species",title = "Richness across the K/Pg boundary") +
   theme_bw() +
   theme(aspect.ratio = 1.5,
+        plot.title = element_text(face = "bold"),
         panel.grid=element_line(linetype=3,linewidth=0.2, 
                                 color='#53565A'),
         panel.grid.minor=element_blank(),
@@ -498,9 +589,10 @@ clean_spatial_data |>
   summarize(n = n_distinct(Genus)) |> 
   ggplot(aes(x = Age.3, y = n)) +
   geom_col() +
-  labs(x = "Age", y = "Number of genera") +
+  labs(x = "Age", y = "Number of genera",title = "Richness across the K/Pg boundary") +
   theme_bw() +
   theme(aspect.ratio = 1.5,
+        plot.title = element_text(face = "bold"),
         panel.grid=element_line(linetype=3,linewidth=0.2, 
                                 color='#53565A'),
         panel.grid.minor=element_blank(),
@@ -513,37 +605,85 @@ clean_spatial_data |>
 ## Biogeographic connectedness
 
 ```{r}
-# Function.
-BC <- function(taxon_unit, sites) {
-  O <- length(taxon_unit)
-  N <- length(unique(taxon_unit))
-  L <- length(unique(sites))
-  return((O-N)/((L*N)-N))
+# Presence-absence matrix of taxa in sites.
+co_occurrence_matrix <- function(data,age, taxon = NULL) {
+  data <- data |> filter(Age.3 == age)
+  data |>
+  distinct(cell,Species) |>
+  mutate(presence = 1) |>
+  pivot_wider(names_from = Species, values_from = presence, values_fill = 0) |>
+  column_to_rownames("cell") |> 
+  as.matrix() |> 
+  t()
 }
 
-clean_spatial_data |> 
-  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
-  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
-  group_by(Age.3) |> 
-  summarize(
-    BC = BC(Species, cell),
-    count_occurrences = n(),
-    count_unique_species = n_distinct(Species)
-  ) |> 
-  # Visualize:
-  ggplot(aes(x = Age.3, y = BC, fill = Age.3)) +
-  geom_bar(stat = "identity") +
-  scale_fill_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
-  scale_colour_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +  
-  coord_flip() +
-  theme_minimal() +
+# Biogeographic connectedness (sensu Sidor et al.)
+cmp_bc <- co_occurrence_matrix(data = clean_spatial_data,age = "Campanian") |> 
+  dispeRse::BC(tree = NULL,jackknife = TRUE,
+               resample.replicates = 9999)
+
+maa_bc <- co_occurrence_matrix(data = clean_spatial_data,age = "Maastrichtian") |> 
+  dispeRse::BC(tree = NULL,jackknife = TRUE,
+               resample.replicates = 9999)
+
+dan_bc <- co_occurrence_matrix(data = clean_spatial_data,age = "DanSelCombined") |> 
+  dispeRse::BC(tree = NULL,jackknife = TRUE,
+               resample.replicates = 9999)
+
+tha_bc <- co_occurrence_matrix(data = clean_spatial_data,age = "Thanetian") |>
+  dispeRse::BC(tree = NULL,jackknife = TRUE,
+               resample.replicates = 9999)
+
+# 95% confidence intervals.
+intervals <-  function(xvar,alpha=0.975) {
+  mean<-mean(xvar)
+  std<-sd(xvar)
+  n<-length(xvar)
+  ci.s.x<-sqrt((std^2)/n)
+  pi.s.x<-std*sqrt(1+1/n)
+  t<-qt(alpha,df=n-1)
+  ci.uci<-mean+t*ci.s.x
+  ci.lci<-mean-t*ci.s.x
+  pi.uci<-mean+t*pi.s.x
+  pi.lci<-mean-t*pi.s.x
+  res<-as.list(c(round(mean,4),round(std,4),n,round(t,4),round(ci.lci,4),round(ci.uci,4),round(pi.lci,4),round(pi.uci,4)))
+  names(res)<-c('mean','st.dev','N','t.stat','Lower.CI','Upper.CI','Lower.PI','Upper.PI')
+  return(res)
+}
+
+rbind(
+  intervals(xvar = cmp_bc$BC_resampled[,7])[c(1,7:8)],
+  intervals(xvar = maa_bc$BC_resampled[,7])[c(1,7:8)],
+  intervals(xvar = dan_bc$BC_resampled[,7])[c(1,7:8)],
+  intervals(xvar = tha_bc$BC_resampled[,7])[c(1,7:8)]
+) |> 
+  as.data.frame() |> 
+  mutate(age = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian")) |> 
+  mutate(age = factor(age, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |> 
+  mutate(stats = "95% PI") |> 
+  rename("mean_bc" = "mean") |> 
+  mutate(across(1:3, ~ as.numeric(.x))) |>
+  # Visualize.
+  ggplot(aes(x = age, y = mean_bc, colour = age)) + 
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = Lower.PI, ymax = Upper.PI), width = 0.2) +
+  scale_fill_manual(values =   c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
+  scale_colour_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
+  geom_vline(xintercept = 2.5,linetype = 2) +
+  labs(y = "Biogeographic connectedness",x = NULL,title = "Jackknifing with 10,000 replicates") +
+  theme_bw() +
   labs(x = NULL) +
   theme(plot.title = element_text(hjust = 0.5, size = 8, face = "bold"),
         axis.title = element_text(size = 8,face = "bold"),
         axis.text = element_text(size = 8),
+        axis.text.x = element_text(angle = 45,hjust = 1,vjust = 1),
+        axis.text.y = element_text(angle = 90,hjust = .5),
         strip.text = element_text(face = "bold"),
         legend.position = "none",
-        aspect.ratio = 1)
+        aspect.ratio = 1.5)
+
+# Spatially standardized with divvy.
+
 ```
 
 ## Spatial binning
@@ -558,45 +698,38 @@ pm <- platemodel(
   rotation = pathToRotations
 )
 
-# Plot.
-plates_campanian <- reconstruct("static_polygons", age= 77.75, model =pm)  # Campanian
-plates_maastrichtian <- reconstruct("static_polygons", age= 69, model =pm) # Maastrichtian
-plates_danian <- reconstruct("static_polygons", age= 62.5, model =pm)      # Danian
-plates_thanetian <- reconstruct("static_polygons", age= 57.5, model =pm)   # Thanetian
+colour <- c("#2A363BFF", "#019875FF", "#99B898FF", "#FECEA8FF", "#FF847CFF", "#E84A5FFF", "#C0392BFF", "#96281BFF")
 
-# Transform plates to Mollweide projection.
+biogeo_maps <- function(stage_name, plate_data, hexa_data, age_col, palette = colour) {
+  # Plate polygons
+  plot(st_transform(plate_data, "ESRI:54030")$geometry,
+       col = '#53565A', border = NA, reset = FALSE)
 
-# Campanian.
-plot(hexa,table(clean_spatial_data[clean_spatial_data$Age.3 == "Campanian",]$cell),
-     crs ="ESRI:54009",
-     border = "#53565A",
-     reset=FALSE)
+  # Hexa plot with counts.
+  plot(hexa_data,
+       table(clean_spatial_data[clean_spatial_data[[age_col]] == stage_name, ]$cell),
+       add = TRUE,
+       crs = "ESRI:54030",
+       border = "#0000FF08",
+       pal = colour,
+       reset = FALSE)
 
-plot(sf::st_transform(plates_campanian, "ESRI:54009")$geometry, add = TRUE,border= NA, col = "#66666688")
+  # Stage label
+  mtext(stage_name, side = 3, line = 0.5, font = 2)
+}
 
-# Maastrichtian.
-plot(hexa,table(clean_spatial_data[clean_spatial_data$Age.3 == "Maastrichtian",]$cell),
-     crs ="ESRI:54009",
-     border = "#53565A",
-     reset=FALSE)
+# Reconstructed plates
+plates_list <- list(
+  "Campanian" = reconstruct("static_polygons", age = 77.75, model = pm),
+  "Maastrichtian" = reconstruct("static_polygons", age = 69, model = pm),
+  "DanSelCombined" = reconstruct("static_polygons", age = 62.5, model = pm),
+  "Thanetian" = reconstruct("static_polygons", age = 57.5, model = pm)
+)
 
-plot(sf::st_transform(plates_maastrichtian, "ESRI:54009")$geometry, add = TRUE,border= NA, col = "#66666688")
-
-# Danian-Selandian.
-plot(hexa,table(clean_spatial_data[clean_spatial_data$Age.3 == "DanSelCombined",]$cell),
-     crs ="ESRI:54009",
-     border = "#53565A",
-     reset=FALSE)
-
-plot(sf::st_transform(plates_danian, "ESRI:54009")$geometry, add = TRUE,border= NA, col = "#66666688")
-
-# Thanetian.
-plot(hexa,table(clean_spatial_data[clean_spatial_data$Age.3 == "Thanetian",]$cell),
-     crs ="ESRI:54009",
-     border = "#53565A",
-     reset=FALSE)
-
-plot(sf::st_transform(plates_thanetian, "ESRI:54009")$geometry, add = TRUE,border= NA, col = "#66666688")
+par(mfrow = c(2, 2), mar = c(0, 0, 2, 0))
+for (i in names(plates_list)) {
+  biogeo_maps(i, plates_list[[i]], hexa, "Age.3")
+}
 ```
 
 ```{r}
@@ -620,6 +753,28 @@ clean_spatial_data |>
   geom_bar(stat = "identity") +
   labs(title = "Number of species per cell") +
   facet_wrap(.~Age.3,scales = "free")
+```
+
+```{r}
+# Create latitude bands (e.g. every 10 degrees)
+clean_spatial_data |> 
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
+  mutate(lat_bin = cut(paleolat, breaks = seq(-90, 90, by = 10), include.lowest = TRUE)) |> 
+  group_by(Age.3, lat_bin) %>%
+  summarise(richness = n_distinct(Species), .groups = "drop") |> 
+  ggplot(aes(x = lat_bin, y = richness,color = Age.3, group = Age.3)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(
+    x = "Paleolatitude Band (°)",
+    y = "Species Richness",
+    fill = "Time Bin",
+    title = "Latitudinal Richness Patterns Across the K–Pg Boundary"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        aspect.ratio = 1.5)
 ```
 
 ## Subsampling routine
@@ -650,16 +805,16 @@ boot_age <- function(x, n_boot = NULL, n_strata = NULL, n_per_stratum = NULL) {
 
 # Campanian
 set.seed(1)
-boot_campanian <- boot_age(x = campanian_split,n_boot = 999,n_strata = 5,n_per_stratum = 15)
+boot_campanian <- boot_age(x = campanian_split,n_boot = 999,n_strata = 7,n_per_stratum = 10)
 # Maastrichtian.
 set.seed(2)
-boot_maastrichtian <- boot_age(x = maastrichtian_split,n_boot = 999,n_strata = 5,n_per_stratum = 15)
+boot_maastrichtian <- boot_age(x = maastrichtian_split,n_boot = 999,n_strata = 7,n_per_stratum = 10)
 # Danian-Selandian.
 set.seed(3)
-boot_danian <- boot_age(x = danian_split,n_boot = 999,n_strata = 5,n_per_stratum = 15)
+boot_danian <- boot_age(x = danian_split,n_boot = 999,n_strata = 7,n_per_stratum = 10)
 # Thanetian.
 set.seed(4)
-boot_thanetian <- boot_age(x = thanetian_split,n_boot = 999,n_strata = 5,n_per_stratum = 15)
+boot_thanetian <- boot_age(x = thanetian_split,n_boot = 999,n_strata = 7,n_per_stratum = 10)
 
 # Function.
 combine_boot_lists <- function(x) {
@@ -772,14 +927,6 @@ mas_jaccard_genera <- jaccard_similarity(combined_mas,group_col = "Genus")
 dan_jaccard_genera <- jaccard_similarity(combined_dan,group_col = "Genus")
 # Thanetian.
 tha_jaccard_genera <- jaccard_similarity(combined_tha,group_col = "Genus")
-
-# Average similarity for each cell-pair and stage.
-mean_jaccard <- function(x) {
-  bind_rows(x) |>
-  group_by(cell_x, cell_y) |> 
-  summarise(avg_jaccard = mean(jaccard_similarity)) |> 
-  rename("x.cell" = "cell_x", "y.cell" = "cell_y") 
-  }
 ```
 
 ## Great Circle Distance
@@ -823,6 +970,14 @@ tha_matrix <- matrix_results(x = tdp)
 ## Visualize results
 
 ```{r message=FALSE,warning=FALSE}
+# Average similarity for each cell-pair and stage.
+mean_jaccard <- function(x) {
+  bind_rows(x) |>
+  group_by(cell_x, cell_y) |> 
+  summarise(avg_jaccard = mean(jaccard_similarity)) |> 
+  rename("x.cell" = "cell_x", "y.cell" = "cell_y") 
+}
+
 # Function.
 adjust_matrix <- function(x,y) {
   x |> 
@@ -895,18 +1050,27 @@ p1 <-
   geom_errorbar(aes(ymin = second, ymax = first), width = 0.05, linewidth = 1, position = position_dodge(width = 0.3)) + 
   geom_line(linewidth = 1, position = position_dodge(width = 0.3)) +
   # scale_size_continuous(breaks = c(5, 10, 15, 20, 25, 30)) +
-  scale_fill_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
+  scale_fill_manual(values =   c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
   scale_colour_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) + 
   geom_point(aes(size = n),shape = 21,fill = "white",stroke = 1.5,position = position_dodge(width = 0.3)) +
-  labs(x = "Great Circle Distance (km)", 
+  labs(x = "Great circle distance (km)", 
        y = "Similarity Value",
        title = "Species-level assessment",
-       subtitle = "Subsampling by cells and occurrences", colour = "Stages", size = "Cell-pair comparison") +
-  theme_classic() +
-  theme(plot.title = element_text(face = "bold"),
-        axis.title = element_text(face = "bold"),
-        legend.title = element_text(face = "bold"),
-        aspect.ratio = 1)
+       subtitle = "Subsampling by cells and occurrences", colour = "Age", fill = "Age",size = "Cell-pair comparison") +
+  scale_y_continuous(expand = expansion(mult = c(0.02, 0.05))) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 12, hjust = 0.5),
+    plot.subtitle = element_text(size = 10, hjust = 0.5),
+    axis.title = element_text(face = "bold", size = 10),
+    legend.title = element_text(face = "bold"),
+    legend.position = "bottom",
+    panel.grid.major = element_line(colour = "gray90"),
+    panel.grid.minor = element_blank(),
+    aspect.ratio = 1
+  )
+
+p1
 
 # Genus-level analysis.
 p2 <- 
@@ -921,74 +1085,109 @@ p2 <-
   ggplot(aes(x = cutdist, y = avg, group = label, colour = label, fill = label)) +
   geom_errorbar(aes(ymin = second, ymax = first), width = 0.05, linewidth = 1, position = position_dodge(width = 0.3)) + 
   geom_line(linewidth = 1, position = position_dodge(width = 0.3)) +
-  scale_fill_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
+  scale_fill_manual(values =   c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
   scale_colour_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) + 
   geom_point(aes(size = n),shape = 21,fill = "white",stroke = 1.5,position = position_dodge(width = 0.3)) +
-  labs(x = "Great Circle Distance (km)", 
+  labs(x = "Great circle distance (km)", 
        y = "Similarity Value",
        title = "Genus-level assessment",
-       subtitle = "Subsampling by cells and occurrences", colour = "Stages", size = "Cell-pair comparison") +
-  theme_classic() +
-  theme(plot.title = element_text(face = "bold"),
-        axis.title = element_text(face = "bold"),
-        legend.title = element_text(face = "bold"),
-        aspect.ratio = 1)
+       subtitle = "Subsampling by cells and occurrences", colour = "Age", fill = "Age",size = "Cell-pair comparison") +
+  scale_y_continuous(expand = expansion(mult = c(0.02, 0.05))) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 12, hjust = 0.5),
+    plot.subtitle = element_text(size = 10, hjust = 0.5),
+    axis.title = element_text(face = "bold", size = 10),
+    legend.title = element_text(face = "bold"),
+    legend.position = "bottom",
+    panel.grid.major = element_line(colour = "gray90"),
+    panel.grid.minor = element_blank(),
+    aspect.ratio = 1
+  )
 
-ggarrange(p1,p2,ncol = 2,align = "hv",common.legend = T,legend = "right")
+p2
+
+# ggarrange(p1,p2,ncol = 2,align = "hv",common.legend = T,legend = "right")
 ```
 
-## Co-occurrence network analysis
+## Bipartite network analysis
 
 ```{r}
 # Function used to obtain species co-occurrence by stage.
-co_occurrence_matrix <- function(data,age) {
-  data <- data |> filter(Age.3 == age)
-  data |> 
-  distinct(cell,Species) |> 
-  mutate(presence = 1) |> 
-  pivot_wider(names_from = Species, values_from = presence, values_fill = 0) |> 
-  column_to_rownames("cell") |>
-  as.matrix() |> 
-  t() |>
-  (\(x) x %*% t(x))() |>
-  (\(m) { diag(m) <- 0; m })()
-  
-  }
+# co_occurrence_matrix <- function(data,age) {
+#   data <- data |> filter(Age.3 == age)
+#   data |>
+#   distinct(cell,Species) |>
+#   mutate(presence = 1) |>
+#   pivot_wider(names_from = Species, values_from = presence, values_fill = 0) |>
+#   column_to_rownames("cell")
+#   # as.matrix() |>
+#   # t()
+#   # tcrossprod() |>
+#   # (\(m) { diag(m) <- 0; m })()
+# 
+#   }
 
 # Plotting function.
-network_function <- function(occurrence_matrix,main,vertex.color){
-   gfam <- graph_from_adjacency_matrix(occurrence_matrix, mode = "undirected", weighted = TRUE)
-   par(mai=c(0,0,1,0)) 
-   plot(
-     gfam,
-     layout = layout_with_fr,
-     vertex.label.family = "sans",
-     vertex.size = 8,
-     vertex.shape = "circle",
-     vertex.color= vertex.color,
-     vertex.frame.color = adjustcolor("#544948", alpha.f = .5),
-     vertex.label = NA,
-     main = main,
-     vertex.label.cex = 1)
-   }
+# network_function <- function(occurrence_matrix,main,vertex.color){
+#    gfam <- graph_from_adjacency_matrix(occurrence_matrix, mode = "undirected", weighted = TRUE)
+#    par(mai=c(0,0,1,0)) 
+#    plot(
+#      gfam,
+#      layout = layout_with_fr,
+#      vertex.label.family = "sans",
+#      vertex.size = 8,
+#      vertex.shape = "circle",
+#      vertex.color= vertex.color,
+#      vertex.frame.color = adjustcolor("#544948", alpha.f = .5),
+#      vertex.label = NA,
+#      main = main,
+#      vertex.label.cex = 1)
+#    }
+
 
 # Co-occurrence_matrix
-cmp_co_occur <- co_occurrence_matrix(data = clean_spatial_data,age = "Campanian")
-mas_co_occur <- co_occurrence_matrix(data = clean_spatial_data,age = "Maastrichtian")
-dan_co_occur <- co_occurrence_matrix(data = clean_spatial_data,age = "DanSelCombined")
-tha_co_occur <- co_occurrence_matrix(data = clean_spatial_data,age = "Thanetian")
+# cmp_co_occur <- co_occurrence_matrix(data = clean_spatial_data,age = "Campanian")
+# mas_co_occur <- co_occurrence_matrix(data = clean_spatial_data,age = "Maastrichtian")
+# dan_co_occur <- co_occurrence_matrix(data = clean_spatial_data,age = "DanSelCombined")
+# tha_co_occur <- co_occurrence_matrix(data = clean_spatial_data,age = "Thanetian")
+# 
+# plotweb()
+# plotModuleWeb(moduleWebObject = computeModules(X))
+
 
 # Plot the results.
-layout(matrix(c(1:4),nrow = 1,ncol = 4),respect = T)
-
-network_function(occurrence_matrix = cmp_co_occur,main = "Campanian",vertex.color = "#385581FF")
-network_function(occurrence_matrix = mas_co_occur,main = "Maastrichtian",vertex.color = "#6DBAC6FF")
-network_function(occurrence_matrix = dan_co_occur,main = "Danian-Selandian",vertex.color = "#DAC190FF")
-network_function(occurrence_matrix = tha_co_occur,main = "Thanetian",vertex.color = "#C9052CFF")
-
-# Metrics
-# modularity(cluster_louvain())
-# mean(degree(g))
-# edge_density(g)
+# layout(matrix(c(1:4),nrow = 1,ncol = 4),respect = T)
+# 
+# network_function(occurrence_matrix = cmp_co_occur,main = "Campanian",vertex.color = "#385581FF")
+# network_function(occurrence_matrix = mas_co_occur,main = "Maastrichtian",vertex.color = "#6DBAC6FF")
+# network_function(occurrence_matrix = dan_co_occur,main = "Danian-Selandian",vertex.color = "#DAC190FF")
+# network_function(occurrence_matrix = tha_co_occur,main = "Thanetian",vertex.color = "#C9052CFF")
 ```
+
+## Turnover and nestedness
+
+1. Define presence-absences matrix with grid cells (rows), taxa (column) and entries as 1 (present) or 0 (absent).
+
+```{r}
+# co_occurrence_matrix <- function(data,age) {
+#   data <- data |> filter(Age.3 == age)
+#   data |>
+#   distinct(cell,Species) |>
+#   mutate(presence = 1) |>
+#   pivot_wider(names_from = Species, values_from = presence, values_fill = 0) |>
+#   column_to_rownames("cell") |> 
+#   # Turnover and nestedness component
+#   beta.multi(index.family = "jaccard") |> 
+#   data.frame() |> 
+#   setNames(nm = c("Turnover","Nestedness","B-Diversity")
+#            )
+# }
+# 
+# co_occurrence_matrix(data = clean_spatial_data,age = "Campanian")
+# co_occurrence_matrix(data = clean_spatial_data,age = "Maastrichtian")
+# co_occurrence_matrix(data = clean_spatial_data,age = "DanSelCombined")
+# co_occurrence_matrix(data = clean_spatial_data,age = "Thanetian")
+```
+
 
