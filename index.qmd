@@ -46,7 +46,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-## Libraries
+## Packages
 
 ```{r message=FALSE, warning=FALSE}
 rpkg <- c("dplyr ggplot2 readr boot divvy terra divDyn conflicted rgplates sf colorspace rgl RColorBrewer
@@ -188,7 +188,7 @@ Data <-
          ) |>  # (see Popov and Vladimir A. Lopyrev 2024).
   as.data.frame() |>
   # Remove columns.
-  select(-c("Used","Duplicate","Not_Digitized","Age.2","Age.PD")) # 2381 occurrences with species names.
+  select(-c("Used","Duplicate","Not_Digitized","Age.2","Age.PD")) # 2387 occurrences with species names.
 ```
 
 ## Paleocoordinates
@@ -279,6 +279,7 @@ spatial_data |>
         strip.background=element_blank(),
         strip.text=element_text(hjust=0,face = "bold"),
         aspect.ratio = 1.5,
+        legend.title = element_text(face = "bold"),
         axis.text  = element_text(size = 6),
         plot.title = element_text(face = "bold"),
         axis.title = element_text(face = "bold"))
@@ -398,7 +399,6 @@ spatial_data |>
 ne_countries(continent = "North America", returnclass = "sf") |> 
 ggplot() +
   geom_sf(fill = "#FFFBED") +
-  theme(panel.background = element_blank()) +
   geom_point(
     data = 
       Data |> 
@@ -552,7 +552,7 @@ daniansel_cells <- cell_preparation(data = clean_spatial_data,age = "DanSelCombi
 thanetian_cells <- cell_preparation(data = clean_spatial_data,age = "Thanetian",hexa = hexa,min_occ = 10)
 
 # Combine all data subsets.
-clean_spatial_data <- bind_rows(campanian_cells,maastrich_cells,daniansel_cells,thanetian_cells) # 2302 specimens in total.
+clean_spatial_data <- bind_rows(campanian_cells,maastrich_cells,daniansel_cells,thanetian_cells) # 2308 specimens in total.
 # Create unique identifier for each cell.
 clean_spatial_data <-
   data.frame(unique(clean_spatial_data$cell)) |> # 29 unique cells.
@@ -606,7 +606,7 @@ clean_spatial_data |>
 
 ```{r}
 # Presence-absence matrix of taxa in sites.
-co_occurrence_matrix <- function(data,age, taxon = NULL) {
+co_occurrence_matrix <- function(data,age) {
   data <- data |> filter(Age.3 == age)
   data |>
   distinct(cell,Species) |>
@@ -618,19 +618,23 @@ co_occurrence_matrix <- function(data,age, taxon = NULL) {
 }
 
 # Biogeographic connectedness (sensu Sidor et al.)
-cmp_bc <- co_occurrence_matrix(data = clean_spatial_data,age = "Campanian") |> 
+cmp_bc <- 
+  co_occurrence_matrix(data = clean_spatial_data,age = "Campanian") |> 
   dispeRse::BC(tree = NULL,jackknife = TRUE,
                resample.replicates = 9999)
 
-maa_bc <- co_occurrence_matrix(data = clean_spatial_data,age = "Maastrichtian") |> 
+maa_bc <- 
+  co_occurrence_matrix(data = clean_spatial_data,age = "Maastrichtian") |> 
   dispeRse::BC(tree = NULL,jackknife = TRUE,
                resample.replicates = 9999)
 
-dan_bc <- co_occurrence_matrix(data = clean_spatial_data,age = "DanSelCombined") |> 
+dan_bc <-
+  co_occurrence_matrix(data = clean_spatial_data,age = "DanSelCombined") |> 
   dispeRse::BC(tree = NULL,jackknife = TRUE,
                resample.replicates = 9999)
 
-tha_bc <- co_occurrence_matrix(data = clean_spatial_data,age = "Thanetian") |>
+tha_bc <- 
+  co_occurrence_matrix(data = clean_spatial_data,age = "Thanetian") |>
   dispeRse::BC(tree = NULL,jackknife = TRUE,
                resample.replicates = 9999)
 
@@ -718,7 +722,7 @@ biogeo_maps <- function(stage_name, plate_data, hexa_data, age_col, palette = co
   mtext(stage_name, side = 3, line = 0.5, font = 2)
 }
 
-# Reconstructed plates
+# Reconstructed plates.
 plates_list <- list(
   "Campanian" = reconstruct("static_polygons", age = 77.75, model = pm),
   "Maastrichtian" = reconstruct("static_polygons", age = 69, model = pm),
@@ -761,11 +765,11 @@ clean_spatial_data |>
   mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
   mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
   mutate(lat_bin = cut(paleolat, breaks = seq(-90, 90, by = 10), include.lowest = TRUE)) |> 
-  group_by(Age.3, lat_bin) %>%
+  group_by(Age.3, lat_bin) |> 
   summarise(richness = n_distinct(Species), .groups = "drop") |> 
   ggplot(aes(x = lat_bin, y = richness,color = Age.3, group = Age.3)) +
-  geom_line() +
-  geom_point() +
+  geom_line(linewidth = .5) +
+  geom_point(size = 2, fill = "white", shape = 21) +
   theme_minimal() +
   labs(
     x = "Paleolatitude Band (°)",
@@ -1060,8 +1064,8 @@ p1 <-
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.05))) +
   theme_minimal(base_size = 12) +
   theme(
-    plot.title = element_text(face = "bold", size = 12, hjust = 0.5),
-    plot.subtitle = element_text(size = 10, hjust = 0.5),
+    plot.title = element_text(face = "bold", size = 12, hjust = 0),
+    plot.subtitle = element_text(size = 10, hjust = 0),
     axis.title = element_text(face = "bold", size = 10),
     legend.title = element_text(face = "bold"),
     legend.position = "bottom",
