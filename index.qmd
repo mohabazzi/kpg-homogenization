@@ -1,5 +1,5 @@
 ---
-title: "Increased cosmopolitanism in sharks in the wake of the end-Cretaceous mass extinction event "
+title: "Increased cosmopolitanism in sharks in the wake of the end-Cretaceous mass extinction event"
 title-block-banner: "#2E2D29"
 title-block-banner-color: "#FFFFFF"
 subtitle: "Supplementary Data:"
@@ -70,6 +70,8 @@ conflicted::conflicts_prefer(rgplates::reconstruct)
 
 Fossil occurrence data for Late Cretaceous (Campanian-Maastrichtian) and Paleocene (Danian-Thanetian) sharks were compiled using the primary literature and specimens from museum collections. Data processing mainly involved standardizing genus and species spelling, but also updating nomenclature were appropriate. Unspecified species (i.e., sp) were not considered part of the analysis. We performed our analyses at both genus and species levels.The final cleaned occurrence dataset comprised **X** occurrences representing **X** species and **X** genera. Occurrence data were binned into chronostratigraphic ages.
 
+Two datasets are analyzed separately: 1) occurrences at the species level and 2) occurrences at the genus level.
+
 ```{r}
 # Occurrence Database.
 Data <-
@@ -78,6 +80,8 @@ Data <-
   filter(!View %in% c("oblique labial","oblique lingual")) |> 
   mutate(Locale = as.factor(Locale)) |> 
   mutate(Species = as.factor(Species)) |>
+  # Squatiniformes.
+  mutate(Species = case_when(Species == "Squatina cf. prima" ~ "Squatina prima", TRUE ~ Species)) |> 
   # Synechodontiformes.
   mutate(Species = case_when(Species == "Synechodus cf. faxensis" ~ "Synechodus faxensis",
                              Species == "Sphenodus cf. lundgreni" ~ "Sphenodus lundgreni", TRUE ~ Species)) |> 
@@ -139,6 +143,7 @@ Data <-
                              Species %in% c("Carcharias cf. C. heathi", "Carcharias heathi nov. sp.") ~ "Carcharias heathi",TRUE ~ Species)) |>
   # Carcharhiniformes.
   mutate(Species = case_when(Species == "Paratriakis tenuis sp. nov." ~ "Paratriakis tenuis",
+                             Species == "Premontreia (Oxyscyllium) subulidens" ~ "Premontreia subulidens",
                              Species == "Palaeogaleus aff. faujasi" ~ "Palaeogaleus faujasi",
                              Species == "Galeorhinus gomphorhiza" ~ "Khouribgaleus gomphorhiza",
                              Species == "Scyliorhinus ivagrantae nov. sp." ~ "Scyliorhinus ivagrantae",
@@ -172,7 +177,8 @@ remove_obs <- c("Squalicorax sp.","Squalicorax nov. sp. 2","Squalicorax nov. sp.
                 "Galeorhinus sp.","Foumtizia sp.","Echinorhinus sp.","Dalatias sp.","Cretalamna sp.","Cretalamna sp.", 
                 "Columbusia sp.", "Chlamydoselachus sp.","Chiloscyllium sp.","Centrophorus sp.", "Carcharias sp.", "Brachycarcharias sp.",
                 "Abdounia sp.","Woellsteinia sp.","Weltonia sp.","Triakis n. sp.","Squatina sp.","Squaliodalatias sp.",
-                "sp. nov.","sp. nov. A","sp. nov. B", "Hemiscyllium sp.")
+                "sp. nov.","sp. nov. A","sp. nov. B", "Hemiscyllium sp.","Premontreia (Oxyscyllium) sp","Triakis sp.",
+                "Palaeohypotodus sp.","Hologinglymostoma sp.","Palaeogaleus sp.")
 
 Data <- Data |> filter(!Species %in% remove_obs)
 
@@ -188,7 +194,7 @@ Data <-
          ) |>  # (see Popov and Vladimir A. Lopyrev 2024).
   as.data.frame() |>
   # Remove columns.
-  select(-c("Used","Duplicate","Not_Digitized","Age.2","Age.PD")) # 2387 occurrences with species names.
+  select(-c("Used","Duplicate","Not_Digitized","Age.2","Age.PD")) # 2429 occurrences with species names.
 ```
 
 ## Paleocoordinates
@@ -552,10 +558,10 @@ daniansel_cells <- cell_preparation(data = clean_spatial_data,age = "DanSelCombi
 thanetian_cells <- cell_preparation(data = clean_spatial_data,age = "Thanetian",hexa = hexa,min_occ = 10)
 
 # Combine all data subsets.
-clean_spatial_data <- bind_rows(campanian_cells,maastrich_cells,daniansel_cells,thanetian_cells) # 2308 specimens in total.
+clean_spatial_data <- bind_rows(campanian_cells,maastrich_cells,daniansel_cells,thanetian_cells) # 2350 specimens in total.
 # Create unique identifier for each cell.
 clean_spatial_data <-
-  data.frame(unique(clean_spatial_data$cell)) |> # 29 unique cells.
+  data.frame(unique(clean_spatial_data$cell)) |> # 30 unique cells.
   setNames(nm = "cell") |> 
   mutate(cell_id = c(1:length(cell))) |> 
   inner_join(clean_spatial_data, 
