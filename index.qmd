@@ -50,8 +50,8 @@ editor_options:
 
 ```{r message=FALSE, warning=FALSE}
 rpkg <- c("dplyr ggplot2 readr boot divvy terra divDyn conflicted rgplates sf colorspace rgl RColorBrewer
-           icosa tidyr tibble purrr downloadthis ggpubr openxlsx igraph Matrix RColorBrewer bipartite
-           betapart rnaturalearth dispeRse")
+           icosa tidyr tibble purrr downloadthis ggpubr openxlsx igraph Matrix RColorBrewer
+           betapart rnaturalearth dispeRse chronosphere ncdf4")
 
 import_pkg <- function(x)
   x |> trimws() |> strsplit("\\s+")  |> unlist() |> 
@@ -194,7 +194,7 @@ Data <-
          ) |>  # (see Popov and Vladimir A. Lopyrev 2024).
   as.data.frame() |>
   # Remove columns.
-  select(-c("Used","Duplicate","Not_Digitized","Age.2","Age.PD")) # 2448 occurrences with species names.
+  select(-c("Used","Duplicate","Not_Digitized","Age.2","Age.PD")) # 2444 occurrences with species names.
 ```
 
 ## Paleocoordinates
@@ -609,10 +609,12 @@ clean_spatial_data |>
 
 ## Biogeographic connectedness
 
+Spatial subsampling is required here.
+
 ```{r}
 # Presence-absence matrix of taxa in sites.
-co_occurrence_matrix <- function(data,age) {
-  data <- data |> filter(Age.3 == age)
+co_occurrence_matrix <- function(data,age_interval) {
+  data <- data |> filter(Age.3 == age_interval)
   data |>
   distinct(cell,Species) |>
   mutate(presence = 1) |>
@@ -624,27 +626,27 @@ co_occurrence_matrix <- function(data,age) {
 
 # Biogeographic connectedness (sensu Sidor et al.)
 cmp_bc <- 
-  co_occurrence_matrix(data = clean_spatial_data,age = "Campanian") |> 
+  co_occurrence_matrix(data = clean_spatial_data,age_interval = "Campanian") |> 
   dispeRse::BC(tree = NULL,jackknife = TRUE,
                resample.replicates = 9999)
 
 maa_bc <- 
-  co_occurrence_matrix(data = clean_spatial_data,age = "Maastrichtian") |> 
+  co_occurrence_matrix(data = clean_spatial_data,age_interval = "Maastrichtian") |> 
   dispeRse::BC(tree = NULL,jackknife = TRUE,
                resample.replicates = 9999)
 
 dan_bc <-
-  co_occurrence_matrix(data = clean_spatial_data,age = "DanSelCombined") |> 
+  co_occurrence_matrix(data = clean_spatial_data,age_interval = "DanSelCombined") |> 
   dispeRse::BC(tree = NULL,jackknife = TRUE,
                resample.replicates = 9999)
 
 tha_bc <- 
-  co_occurrence_matrix(data = clean_spatial_data,age = "Thanetian") |>
+  co_occurrence_matrix(data = clean_spatial_data,age_interval = "Thanetian") |>
   dispeRse::BC(tree = NULL,jackknife = TRUE,
                resample.replicates = 9999)
 
 # 95% confidence intervals.
-intervals <-  function(xvar,alpha=0.975) {
+intervals <- function(xvar,alpha=0.975) {
   mean<-mean(xvar)
   std<-sd(xvar)
   n<-length(xvar)
@@ -698,6 +700,19 @@ rbind(
 
 ```
 
+## Maps
+
+```{r message=FALSE,warning=FALSE}
+# Fetch the datasets.
+basemap <- fetch(src = "paleomap", ser = "paleoatlas")
+
+topo_camp <- basemap[[19]] #80.3 Ma       class: spatraster
+coast_camp <- coastlines[[15]] # 80 Ma    class: sfc_POLYGON"
+
+plot(coast_camp)
+```
+
+
 ## Spatial binning
 
 ```{r}
@@ -745,6 +760,8 @@ for (i in names(plates_list)) {
 ```
 
 ```{r}
+# Order colour vector
+
 # Order-level composition per cell?
 clean_spatial_data |> 
   mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
@@ -765,28 +782,6 @@ clean_spatial_data |>
   geom_bar(stat = "identity") +
   labs(title = "Number of species per cell") +
   facet_wrap(.~Age.3,scales = "free")
-```
-
-```{r}
-# Create latitude bands (e.g. every 10 degrees)
-clean_spatial_data |> 
-  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
-  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
-  mutate(lat_bin = cut(paleolat, breaks = seq(-90, 90, by = 10), include.lowest = TRUE)) |> 
-  group_by(Age.3, lat_bin) |> 
-  summarise(richness = n_distinct(Species), .groups = "drop") |> 
-  ggplot(aes(x = lat_bin, y = richness,color = Age.3, group = Age.3)) +
-  geom_line(linewidth = .5) +
-  geom_point(size = 2, fill = "white", shape = 21) +
-  theme_minimal() +
-  labs(
-    x = "Paleolatitude Band (°)",
-    y = "Species Richness",
-    fill = "Time Bin",
-    title = "Latitudinal Richness Patterns Across the K–Pg Boundary"
-  ) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        aspect.ratio = 1.5)
 ```
 
 ## Subsampling routine
@@ -815,19 +810,6 @@ boot_age <- function(x, n_boot = NULL, n_strata = NULL, n_per_stratum = NULL) {
   })
 }
 
-# Campanian
-set.seed(1)
-boot_campanian <- boot_age(x = campanian_split,n_boot = 999,n_strata = 8,n_per_stratum = 10)
-# Maastrichtian.
-set.seed(2)
-boot_maastrichtian <- boot_age(x = maastrichtian_split,n_boot = 999,n_strata = 8,n_per_stratum = 10)
-# Danian-Selandian.
-set.seed(3)
-boot_danian <- boot_age(x = danian_split,n_boot = 999,n_strata = 8,n_per_stratum = 10)
-# Thanetian.
-set.seed(4)
-boot_thanetian <- boot_age(x = thanetian_split,n_boot = 999,n_strata = 8,n_per_stratum = 10)
-
 # Function.
 combine_boot_lists <- function(x) {
   result <- vector("list", length(x))
@@ -837,12 +819,31 @@ combine_boot_lists <- function(x) {
   result
 }
 
-combined_cam <- combine_boot_lists(x = boot_campanian)
-combined_mas <- combine_boot_lists(x = boot_maastrichtian)
-combined_dan <- combine_boot_lists(x = boot_danian)
-combined_tha <- combine_boot_lists(x = boot_thanetian)
+# Campanian
+set.seed(1)
+boot_campanian <- 
+  boot_age(x = campanian_split,n_boot = 999,n_strata = 8,n_per_stratum = 10) |> 
+  combine_boot_lists() # retains the bootstrap structure with each replicate.
 
-# Functions.
+# Maastrichtian.
+set.seed(2)
+boot_maastrichtian <- 
+  boot_age(x = maastrichtian_split,n_boot = 999,n_strata = 8,n_per_stratum = 10) |> 
+  combine_boot_lists()
+
+# Danian-Selandian.
+set.seed(3)
+boot_danian <- 
+  boot_age(x = danian_split,n_boot = 999,n_strata = 8,n_per_stratum = 10) |> 
+  combine_boot_lists()
+
+# Thanetian.
+set.seed(4)
+boot_thanetian <- 
+  boot_age(x = thanetian_split,n_boot = 999,n_strata = 8,n_per_stratum = 10) |> 
+  combine_boot_lists()
+
+# Function.
 taxa_occurence_cell <- function(combined_data) {
  purrr::map(combined_data, ~ .x |> group_by(cell,Species,Genus) |> summarise(occs_species = n(),occs_genera = n(), .groups = 'drop')) |> 
   lapply(as.data.frame) |> 
@@ -857,10 +858,10 @@ distinct_cells <- function(data) {
   pull(x)
 }
 
-camp_cells <- distinct_cells(data = taxa_occurence_cell(combined_cam))
-mass_cells <- distinct_cells(data = taxa_occurence_cell(combined_mas))
-dani_cells <- distinct_cells(data = taxa_occurence_cell(combined_dan))
-than_cells <- distinct_cells(data = taxa_occurence_cell(combined_tha))
+camp_cells <- distinct_cells(data = taxa_occurence_cell(boot_campanian))
+mass_cells <- distinct_cells(data = taxa_occurence_cell(boot_maastrichtian))
+dani_cells <- distinct_cells(data = taxa_occurence_cell(boot_danian))
+than_cells <- distinct_cells(data = taxa_occurence_cell(boot_thanetian))
 
 # Distinct cell pairs.
 cells_distinct_pair <- function(data_x1,data_x2) {
@@ -878,8 +879,10 @@ tdp <- cells_distinct_pair(data_x1 = than_cells,data_x2 = than_cells)
 
 ## Jaccard similarity
 
+For a given taxonomic-unit (i.e.,genus or species) we caluclate all pairwise cell similarities using the Jaccard index for each bootstrap replicate.
+
 ```{r message=FALSE}
-jaccard_similarity <- function(x, group_col) {
+jaccard_similarity <- function(x, taxon_category) {
 
   js_table <- list()
   
@@ -895,14 +898,14 @@ jaccard_similarity <- function(x, group_col) {
     
     for (i in seq_along(unique_cells)) {
       cell_x <- unique_cells[i]
-      unique_names_cell_x <- unique(x[[k]][[group_col]][x[[k]]$cell == cell_x])
+      unique_names_cell_x <- unique(x[[k]][[taxon_category]][x[[k]]$cell == cell_x])
       
       for (j in seq_along(unique_cells)) {
         cell_y <- unique_cells[j]
         
         if (cell_x == cell_y || cell_x > cell_y) next
         
-        unique_names_cell_y <- unique(x[[k]][[group_col]][x[[k]]$cell == cell_y])
+        unique_names_cell_y <- unique(x[[k]][[taxon_category]][x[[k]]$cell == cell_y])
         intersection <- length(generics::intersect(unique_names_cell_x, unique_names_cell_y))
         union_length <- length(generics::union(unique_names_cell_x, unique_names_cell_y))
         jaccard_similarity <- intersection / union_length
@@ -923,29 +926,29 @@ jaccard_similarity <- function(x, group_col) {
 }
 
 # Campanian.
-cmp_jaccard_species <- jaccard_similarity(x = combined_cam,group_col = "Species")
+cmp_jaccard_species <- jaccard_similarity(x = boot_campanian,taxon_category = "Species")
 # Maastrichtian.
-mas_jaccard_species <- jaccard_similarity(combined_mas,group_col = "Species")
+mas_jaccard_species <- jaccard_similarity(x = boot_maastrichtian,taxon_category = "Species")
 # Danian/Selandian.
-dan_jaccard_species <- jaccard_similarity(combined_dan,group_col = "Species")
+dan_jaccard_species <- jaccard_similarity(x = boot_danian,taxon_category = "Species")
 # Thanetian.
-tha_jaccard_species <- jaccard_similarity(combined_tha,group_col = "Species")
+tha_jaccard_species <- jaccard_similarity(x = boot_thanetian,taxon_category = "Species")
 
 # Campanian.
-cmp_jaccard_genera <- jaccard_similarity(x = combined_cam,group_col = "Genus")
+cmp_jaccard_genera <- jaccard_similarity(x = boot_campanian,taxon_category = "Genus")
 # Maastrichtian.
-mas_jaccard_genera <- jaccard_similarity(combined_mas,group_col = "Genus")
+mas_jaccard_genera <- jaccard_similarity(x = boot_maastrichtian,taxon_category = "Genus")
 # Danian/Selandian.
-dan_jaccard_genera <- jaccard_similarity(combined_dan,group_col = "Genus")
+dan_jaccard_genera <- jaccard_similarity(x = boot_danian,taxon_category = "Genus")
 # Thanetian.
-tha_jaccard_genera <- jaccard_similarity(combined_tha,group_col = "Genus")
+tha_jaccard_genera <- jaccard_similarity(x = boot_thanetian,taxon_category = "Genus")
 ```
 
 ## Great Circle Distance
 
 ```{r}
 # Function.
-gcd.slc <- function(long1, lat1, long2, lat2) {
+gcd_slc <- function(long1, lat1, long2, lat2) {
   R <- 6371
   long1.r <- long1*pi/180
   long2.r <- long2*pi/180
@@ -968,7 +971,7 @@ matrix_results <- function(x) {
   # Rename variables.
   rename("y_long" = "long","y_lat" = "lat") |> 
   # GCD.
-  mutate(gcd = gcd.slc(long1 = x_long,lat1 = x_lat,long2 = y_long,lat2 = y_lat)) |> 
+  mutate(gcd = gcd_slc(long1 = x_long,lat1 = x_lat,long2 = y_long,lat2 = y_lat)) |> 
   as.data.frame()
 }
 
@@ -990,6 +993,13 @@ mean_jaccard <- function(x) {
   rename("x.cell" = "cell_x", "y.cell" = "cell_y") 
 }
 
+
+# mean_jaccard <- function(x) {
+#   bind_rows(x, .id = "replicate_id") |>  # Keep which replicate it came from
+#     group_by(replicate_id, cell_x, cell_y) |> 
+#     summarise(avg_jaccard = mean(jaccard_similarity), .groups = "drop")
+# }
+
 # Function.
 adjust_matrix <- function(x,y) {
   x |> 
@@ -997,6 +1007,15 @@ adjust_matrix <- function(x,y) {
   left_join(y,by = c("x.cell","y.cell")) 
   }
   
+# adjust_matrix <- function(x, y) {
+#   x |> 
+#     rename("x.cell" = "x", "y.cell" = "y") |> 
+#     left_join(
+#       y |> rename("x.cell" = "cell_x", "y.cell" = "cell_y"), 
+#       by = c("x.cell", "y.cell")
+#     )
+# }
+
 cmp_species_input <- adjust_matrix(x = cmp_matrix,y = mean_jaccard(x = cmp_jaccard_species))
 mas_species_input <- adjust_matrix(x = mas_matrix,y = mean_jaccard(x = mas_jaccard_species))
 dan_species_input <- adjust_matrix(x = dan_matrix,y = mean_jaccard(x = dan_jaccard_species))
@@ -1028,6 +1047,7 @@ mas_genera_binned <- add_cutdist(df = mas_genera_input,new_col = "gcd")
 dan_genera_binned <- add_cutdist(df = dan_genera_input,new_col = "gcd")
 tha_genera_binned <- add_cutdist(df = tha_genera_input,new_col = "gcd")
 
+
 # Function (average and standard deviation).
 summary_statistics <- function(x) {
   x |> 
@@ -1044,9 +1064,11 @@ summary_statistics <- function(x) {
   ) |> 
   mutate(cutdist = cutdist,
          cutdist = factor(cutdist,levels = c("0","2000","4000","6000","8000","10000","12000","14000","16000","18000","20000"))) |> 
-  mutate(ci = se * qt(.95, n - 1), ci = as.numeric(ci)) |> 
+  mutate(ci = se * qt(.975, n - 1), ci = as.numeric(ci)) |> 
   as.data.frame() |> suppressWarnings() 
   }
+
+# Replicate-level variation is so far missing. A bootstrap CI needs to be computed.
 
 # Species-level analysis.
 p1 <- 
@@ -1059,25 +1081,26 @@ p1 <-
   mutate(label = factor(label, levels = c("Campanian","Maastrichtian","Danian","Thanetian"))) |> 
 # Plot.
   ggplot(aes(x = cutdist, y = avg, group = label, colour = label, fill = label)) +
-  geom_errorbar(aes(ymin = second, ymax = first), width = 0.05, linewidth = 1, position = position_dodge(width = 0.3)) + 
+  geom_errorbar(aes(ymin = first, ymax = second), width = 0.05, linewidth = 1, position = position_dodge(width = 0.3)) + 
   geom_line(linewidth = 1, position = position_dodge(width = 0.3)) +
   # scale_size_continuous(breaks = c(5, 10, 15, 20, 25, 30)) +
-  scale_fill_manual(values =   c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) +
-  scale_colour_manual(values = c("#385581FF","#6DBAC6FF","#DAC190FF","#C9052CFF")) + 
+  scale_fill_manual(values =   c("#000000FF", "#2A9D8FFF", "#4361EEFF", "#9B5DE5FF")) +
+  scale_colour_manual(values = c("#000000FF", "#2A9D8FFF", "#4361EEFF", "#9B5DE5FF")) +
   geom_point(aes(size = n),shape = 21,fill = "white",stroke = 1.5,position = position_dodge(width = 0.3)) +
   labs(x = "Great circle distance (km)", 
-       y = "Similarity Value",
-       title = "Species-level assessment",
-       subtitle = "Subsampling by cells and occurrences", colour = "Age", fill = "Age",size = "Cell-pair comparison") +
+       y = "Mean Jaccard similarity",
+       title = "Similarity decay by distance",
+       subtitle = "Species-level", colour = "Age", fill = "Age",size = "Cell-pair comparison") +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.05))) +
   theme_bw(base_size = 12) +
   theme(
     plot.title = element_text(face = "bold", size = 12, hjust = 0),
     plot.subtitle = element_text(size = 10, hjust = 0),
     axis.title = element_text(face = "bold", size = 10),
+    axis.text.y = element_text(angle = 90,hjust = 0.5,vjust = .5),
     legend.title = element_text(face = "bold"),
     legend.position = "bottom",
-    panel.grid.major = element_blank(),
+    panel.grid.major = element_line(color = "#E0E0E0", size = 0.3),
     panel.grid.minor = element_blank(),
     aspect.ratio = 1
   )
@@ -1121,6 +1144,94 @@ p2
 
 # ggarrange(p1,p2,ncol = 2,align = "hv",common.legend = T,legend = "right")
 ```
+
+## Other plot using maps
+
+use the 
+
+```{r}
+```
+
+
+## Test
+
+
+```{r}
+library(dplyr)
+library(purrr)
+
+cmp_long <- map2_dfr(
+  cmp_jaccard_species,
+  seq_along(cmp_jaccard_species), # replicate index
+  ~ mutate(.x, replicate = .y)
+)
+
+cmp_long <- cmp_long %>%
+  left_join(cmp_matrix, by = c("cell_x" = "x", "cell_y" = "y"))
+
+cmp_long <- cmp_long %>%
+  mutate(cutdist = bin_distance(gcd))
+
+
+library(dplyr)
+library(purrr)
+library(ggplot2)
+
+## Function to go from bootstrap list -> summary with CIs
+process_bootstrap <- function(jaccard_list, dist_matrix) {
+  
+  # 1. Long format with replicate index
+  long_df <- map2_dfr(
+    jaccard_list,
+    seq_along(jaccard_list),
+    ~ mutate(.x, replicate = .y)
+  )
+  
+  # 2. Merge distances
+  long_df <- long_df %>%
+    left_join(dist_matrix, by = c("cell_x" = "x", "cell_y" = "y"))
+  
+  # 3. Add distance bins
+  long_df <- add_cutdist(long_df, new_col = "gcd")
+  
+  # 4. Mean jaccard per replicate per bin
+  bin_rep <- long_df %>%
+    group_by(replicate, cutdist) %>%
+    summarise(
+      mean_jaccard = mean(jaccard_similarity, na.rm = TRUE),
+      n_pairs = n(),
+      .groups = "drop"
+    )
+  
+  # 5. Across-replicates mean and bootstrap CIs
+  bin_summary <- bin_rep %>%
+    group_by(cutdist) %>%
+    summarise(
+      mean_jaccard = mean(mean_jaccard, na.rm = TRUE),
+      lower_CI = quantile(mean_jaccard, 0.025, na.rm = TRUE),
+      upper_CI = quantile(mean_jaccard, 0.975, na.rm = TRUE),
+      mean_n_pairs = mean(n_pairs),
+      .groups = "drop"
+    )
+  
+  return(bin_summary)
+}
+
+
+
+## Example usage for Campanian
+cmp_bin_summary <- process_bootstrap(cmp_jaccard_species, cmp_matrix)
+
+## Plot
+ggplot(cmp_bin_summary, aes(x = cutdist, y = mean_jaccard)) +
+  geom_point(aes(size = mean_n_pairs)) +
+  geom_errorbar(aes(ymin = lower_CI, ymax = upper_CI), width = 0.3) +
+  theme_minimal()
+
+
+
+```
+
 
 ## Bipartite network analysis
 
