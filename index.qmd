@@ -1,0 +1,1507 @@
+---
+title: "Broad-scale biogeographic stability despite mass extinction in sharks across the K/Pg boundary"
+title-block-banner: "#FFFFFF"
+title-block-banner-color: "#266d51"
+subtitle: "<span style='color:#544948;'>Supplementary Data:</span>"
+description: "<span style='color:#D1660F;'>Swedish Museum of Natural History,Department of Palaeobiology</span>"
+date: last-modified
+date-format: "YYYY-MM-DD"
+mainfont: Figtree
+sansfont: Georgia
+footnotes-hover: true
+reference-location: margin
+lang: en
+search: true
+number-sections: false
+crossref:
+  chapters: true
+author:
+  - name: Mohamad Bazzi
+    orcid: 0000-0002-9495-0781
+    email: Mohamad.Bazzi@nrm.se
+    url: https://github.com/mohabazzi
+    affiliations:
+      - name: Swedish Museum of Natural History
+        department: Department of Palaeobiology
+        address: Stockholm SE-10405
+        country: Sweden
+        url: https://www.nrm.se/
+highlight-style: pygments
+fig-cap-location: top
+lightbox: auto
+format:
+  nrm-quarto-html: default
+code-links:
+  - text: Github Repo
+    icon: github
+    href: https://github.com/mohabazzi/kpg-homogenization
+editor_options: 
+  chunk_output_type: console
+---
+
+::: {#call1 .callout-note appearance="simple"}
+## Reproducibility statement
+
+This Quarto report accompanies the manuscript **Broad-scale biogeographic stability despite mass extinction in sharks across the K/Pg boundary** submitted to the **Proceedings of the Royal Society B: Biological Sciences**. It contains the full R code and analyses used to generate the results in the paper. All analyses were conducted in R version 4.5.3 with Quarto.
+
+**Complete author list:** Mohamad Bazzi, Ashley Prow Fleischer, Mikael Siversson, Jood A. Al Aswad, Jun A. Ebersole and Jonathan L. Payne.
+:::
+
+::: {#call2 .callout-note appearance="simple"}
+## Data statement
+
+The occurrence dataset accompanying this paper needs to be pre-processed according to the standardizations and corrections described in the @sec-database  section before any analyses are conducted.
+:::
+
+## Packages
+
+```{r message=FALSE, warning=FALSE}
+rpkg <- c("dplyr ggplot2 readr terra conflicted rgplates sf colorspace rgl parallel RRPP phangorn janitor
+           icosa tidyr tibble purrr downloadthis ggpubr openxlsx kableExtra knitr jpeg grid divDyn letsR
+           betapart rnaturalearth chronosphere via vegan mgcv divvy iNEXT.beta3D tidygeocoder paleotree")
+
+import_pkg <- function(x)
+  x |> trimws() |> strsplit("\\s+")  |> unlist() |> 
+  lapply(function(x) library(x, character.only = T)) |> 
+  invisible()
+
+rpkg |> import_pkg()
+
+# Resolve conflicted functions.
+conflict_prefer(name = "filter", winner = "dplyr",losers = "stats")
+conflict_prefer(name = "reconstruct",winner = "rgplates",loser = "ape")
+conflict_prefer(name = "map",winner = "purrr",loser = "maps")
+conflict_prefer(name = "map",winner = "purrr",loser = "maps")
+```
+
+## Paleontological occurrence data {#sec-database}
+
+Fossil occurrence data for Late Cretaceous (Campanian-Maastrichtian) and Paleocene (Danian-Thanetian) sharks were compiled using the primary literature and specimens from museum collections. Data processing mainly involved standardizing spelling in genus and species names, but also updating the nomenclature where appropriate. The validity of species was cross-referenced against the [Shark reference database](https://www.shark-references.com/) and a species-level dataset of sharks by [@Guinot2023].
+
+```{r}
+# Fossil Occurrence Database.
+Data <-
+  read.xlsx(xlsxFile = "_data/Data.xlsx") |>
+  # Remove duplicated specimens.
+  filter(!Duplicate %in% c("x")) |> 
+  filter(!View %in% c("oblique labial","oblique lingual")) |> 
+  mutate(Locale = as.factor(Locale)) |> 
+  mutate(Species = as.factor(Species),
+         Genus = as.factor(Genus),
+         Family = as.factor(Family),
+         Order = as.factor(Order)) |>
+  # Squatiniformes.
+  mutate(Species = case_when(Species == "Squatina cf. prima" ~ "Squatina prima", TRUE ~ Species)) |> 
+  # Synechodontiformes.
+  mutate(Species = case_when(Species == "Synechodus cf. faxensis" ~ "Synechodus faxensis",
+                             Species == "Sphenodus cf. lundgreni" ~ "Sphenodus lundgreni", TRUE ~ Species)) |>
+  # Heterodontiformes.
+  mutate(Species = case_when(Species == "Heterodontus granti nov. sp." ~ "Heterodontus granti", TRUE ~ Species)) |> 
+  # Squaliformes.
+  mutate(Species = case_when(Species == "Microetmopterus wardi gen. et sp. nov." ~ "Microetmopterus wardi",
+                             Species == "Squalus gabrielsoni sp. nov." ~ "Squalus gabrielsoni",
+                             Species == "Squalus huntensis nov. sp." ~ "Squalus huntensis", 
+                             Species == "Centrophoroides cf. appendiculatus" ~ "Centrophoroides appendiculatus",TRUE ~ Species)) |> 
+  # Hexanchiformes.
+  mutate(Species = case_when(Species == "Heptranchias howellii" ~ "Heptranchias howelli",
+                             Species == "Hexanchus aff. microdon" ~ "Hexanchus microdon",
+                             Species == "Chlamydoselachus tatere n. sp." ~ "Chlamydoselachus tatere",
+                             # According to Cappetta 2021, Historical Biology.
+                             Species == "Notidanodon dentatus" ~ "Xampylodon dentatus",
+                             Species %in% c("Notidanodon cf. loozi","Notidanodon loozi") ~ "Xampylodon loozi",
+                             Species %in% c("Notidanodon brotzeni sp. nov.", "Notidanodon brotzeni") ~ "Xampylodon brotzeni",TRUE ~ Species)) |> 
+  # Orectolobiformes.
+  mutate(Species = case_when(Species == "Pararhincodon groessenssi" ~ "Pararhincodon groessensi",
+                             Species == "Plicatoscyllium antiquum nov. gen. nov. sp." ~ "Plicatoscyllium antiquum",
+                             Species == "Plicatoscyllium cf globidens" ~ "Plicatoscyllium globidens",
+                             Species == "Galagadon nordquistae n. gen. n. sp." ~ "Galagadon nordquistae",
+                             Species == "Plicatoscyllium derameei nov. gen. nov. sp." ~ "Plicatoscyllium derameei",
+                             Species %in% c("Cantioscyllium cf. meyeri","Cantioscyllium aff. C. meyeri",
+                                            "Cantioscyllium meyeri nov. sp.") ~ "Cantioscyllium meyeri",TRUE ~ Species)) |>
+  # Lamniformes.
+  mutate(Species = case_when(Species %in% c("Carcharias cf. C. holmdelensis","Synodontaspis holmdelensis") ~ "Carcharias holmdelensis",
+                             Species == "Carcharias latus" ~ "Eostriatolamia latus", 
+                             Species == "Carcharias cf whitei" ~ "Carcharias cf. whitei",
+                             Species == "Squalicorax africanus nov sp." ~ "Squalicorax africanus",
+                             Species == "Anomotodon noves" ~ "Anomotodon novus",
+                             Species == "Carcharias teretidens" ~ "Sylvestrilamia teretidens", # According to Guinot and Condamine 2023 (Dataset)
+                             Species == "Squalicorax bassanii " ~ "Squalicorax bassanii",
+                             Species == "Squalicorax pristodontus "  ~ "Squalicorax pristodontus",
+                             Species == "Squalicorax benguerirensis nov. sp." ~ "Squalicorax benguerirensis",
+                             Species == "speyeri" ~ "Odontaspis speyeri",
+                             Species == "Odontaspis cf. winkleri" ~ "Odontaspis winkleri",
+                             Species ==  "inflata" ~ "Isurolamna inflata",
+                             Species == "obliquus" ~ "Otodus obliquus",
+                             Species == "Squalicorax microserratus nov. sp." ~ "Squalicorax microserratus",
+                             Species == "Cretolamna sp." ~ "Cretalamna sp.",
+                             Species == "Lamna cuspidata" ~ "Carcharias cuspidatus", # Opinion of Hovestadt 2020.
+                             Species == "Carcharias macrotus" ~ "Striatolamia macrota",
+                             Species == "Odontaspis rutoti" ~ "Palaeohypotodus rutoti",  # Opinion of Ebersole et al. 2024.
+                             Species == "Carcharodon orientalis" ~ "Palaeocarcharodon orientalis",
+                             Species == "Anomotodon hermani sp. nov." ~ "Anomotodon hermani",
+                             Species == "Squalicorax aff. S. lindstromi" ~ "Squalicorax lindstromi",
+                             Species == "Archaeolamna kopingensis"  ~ "Archaeolamna kopingensis kopingensis",
+                             Species == "Lamna biauriculata nigeriana nov. sub sp." ~ "Cretalamna nigeriana",
+                             Species == "Cretalamna cf. C. borealis" ~ "Cretalamna borealis",
+                             Species == "Cretolamna arambourgi" ~ "Cretalamna arambourgi",
+                             Species %in% c("Carcharias aff. C. tenuis" ,"tenuis") ~ "Carcharias tenuis",
+                             Species %in% c("Squalicorax cf. S. yangaensis","Squalicorax aff. S. yangaensis") ~ "Squalicorax yangaensis",
+                             Species %in% c("Anomotodon aff. A. plicatus","Anomotodon aff. plicatus") ~ "Anomotodon plicatus",
+                             Species %in% c("Odontaspis bronni","Palaeohypotodus aff. bronni") ~ "Palaeohypotodus bronni",
+                             Species %in% c("Cretalamna cf. C. biauriculata","Cretolamna biauriculata") ~ "Cretalamna biauriculata",
+                             Species %in% c("Cretolamna cf. C. maroccana","Cretolamna maroccana") ~ "Cretalamna maroccana",
+                             Species %in% c("Carcharias aff. gracilis","gracilis") ~ "Carcharias gracilis",
+                             Species %in% c("Striatolamia cederstroemi sp. nov.","cederstroemi") ~ "Striatolamia cederstroemi",
+                             Species %in% c("Cretolamna appendiculata", "Cretolamna sp. aff. Cretolamna appendiculata",
+                                            "Cretolamna cf. C. appendiculata") ~ "Cretalamna appendiculata",
+                             Species %in% c("Cretalamna cf. C. sarcoportheta","Cretalamna sarcoportheta sp. nov.") ~ "Cretalamna sarcoportheta",
+                             Species %in% c("Pseudocorax cf. P. affinis","Pseudocorax cf. affinis") ~ "Pseudocorax affinis",
+                             Species %in% c("Anomotodon cf. A. toddi", "Anomotodon toddi nov. sp.") ~ "Anomotodon toddi",
+                             Species %in% c("Carcharias cf. C. samhammeri", "Carcharias cf. samhammeri") ~ "Carcharias samhammeri",
+                             Species %in% c("Carcharias cf. C. heathi", "Carcharias heathi nov. sp.") ~ "Carcharias heathi",TRUE ~ Species)) |>
+  # Carcharhiniformes.
+  mutate(Species = case_when(Species == "Paratriakis tenuis sp. nov." ~ "Paratriakis tenuis",
+                             Species == "Paratriakis subserratus sp. nov." ~ "Palaeotriakis subserratus", # According to Guinot et al. 2013.
+                             Species == "Premontreia (Oxyscyllium) subulidens" ~ "Premontreia subulidens",
+                             Species == "Palaeogaleus aff. faujasi" ~ "Palaeogaleus faujasi",
+                             Species == "Galeorhinus gomphorhiza" ~ "Khouribgaleus gomphorhiza",
+                             Species == "Scyliorhinus ivagrantae nov. sp." ~ "Scyliorhinus ivagrantae",
+                             Species == "Squatigaleus grandjeani nov. sp." ~ "Squatigaleus grandjeani",
+                             Species == "Squatigaleus carinatus nov. sp." ~ "Squatigaleus carinatus",
+                             Species == "Scyliorhinus carinatus sp. nov." ~ "Premontreia carinatus",
+                             Species == "Palaeogaleus navarroensis nov. sp." ~ "Palaeogaleus navarroensis",
+                             Species == "Scyliorhinus aff. cabindensis" ~ "Scyliorhinus cabindensis",
+                             Species == "Tingaleus dakkai n. gen. et nov. sp." ~ "Tingaleus dakkai",
+                             Species %in% c("Galeorhinus aff. girardoti","Galeorhinus cf. G. girardoti") ~ "Galeorhinus girardoti",
+                             Species %in% c("indet.","Triakidae gen. et sp. indet.") ~ NA,
+                             Species %in% c("‘Scyliorhinus’ biddlei", "“Scyliorhinus“ biddlei") ~ "Scyliorhinus biddlei",
+                             Species %in% c("‘Scyliorhinus’ elongatus","“Scyliorhinus” elongatus") ~  "Scyliorhinus elongatus", T ~  Species)) |>
+  # Order level attribution.
+  mutate(Order = case_when(Genus == "Sphenodus" ~ "Hexanchiformes", T ~ Order)) |>  
+  mutate(Order = case_when(Genus == "Parasquatina" ~ "Squatiniformes", T ~ Order)) |>   
+  # Correct family designation.
+  mutate(Family = case_when(Genus == "Palaeohypotodus" ~ "Jaekelotodontidae", T ~ Family)) |> 
+  # Correct genus.
+  mutate(Genus = case_when(Genus == "Cretolamna" ~ "Cretalamna",
+                           Genus == "Paraorthocodus" ~ "Paraorthacodus", T ~ Genus)) |>
+  # Last corrections.
+  mutate(Order = case_when(Genus == "Paraorthacodus" ~ "Hexanchiformes", T ~ Order)) |> # Following Guinot and Condamine here.
+  mutate(Family = case_when(Family == "Palaeospinacidae" ~ "Paraorthacodontidae", T ~ Family)) |> 
+  mutate(Family = case_when(Genus == "Synechodus" ~ "Palaeospinacidae", T ~ Family)) |> 
+  mutate(Family = case_when(Genus == "Cretalamna" ~ "Otodontidae", T ~ Family))
+
+# Remove unspecified species.
+
+# remove_obs <- c("Squalicorax sp.","Squalicorax nov. sp. 2","Squalicorax nov. sp. 1",
+#                 "Scyliorhinus sp. 1","Scyliorhinus sp. 2","Scyliorhinus sp. 2", "Scyliorhinus sp. 1",
+#                 "Scapanorhynchus sp. 2","Scapanorhynchus sp. 1","Scapanorhynchus sp.","Protosqualus sp.",
+#                 "Propristiophorus sp.","Plicatoscyllium sp.","Physogaleus sp.","Paratriakis sp.",
+#                 "Pararhincodon sp.","Paraorthocodus sp.","Paraorthacodus sp.", "Paranomotodon sp.",
+#                 "Palaeogaleus sp. B","Palaeogaleus sp.","Palaeobrachaelurus sp.","Odontaspis sp." ,"Notorynchus sp.",
+#                 "Notidanodon sp.","Nebrius sp.","Megasqualus sp.","Isurolamna sp.","Hexanchus spp.","Hexanchus sp.",
+#                 "Heterodontus sp. 2", "Heterodontus sp.","Heptranchias sp.","Gladioserratus sp.","Ginglymostoma sp.", 
+#                 "Galeorhinus sp.","Foumtizia sp.","Echinorhinus sp.","Dalatias sp.","Cretalamna sp.","Cretalamna sp.", 
+#                 "Columbusia sp.", "Chlamydoselachus sp.","Chiloscyllium sp.","Centrophorus sp.", "Carcharias sp.", "Brachycarcharias sp.",
+#                 "Abdounia sp.","Woellsteinia sp.","Weltonia sp.","Triakis n. sp.","Squatina sp.","Squaliodalatias sp.",
+#                 "sp. nov.","sp. nov. A","sp. nov. B", "Hemiscyllium sp.","Premontreia (Oxyscyllium) sp","Triakis sp.",
+#                 "Palaeohypotodus sp.","Hologinglymostoma sp.","Palaeogaleus sp.")
+
+# Data <- Data |> filter(!Species %in% remove_obs)
+
+# Genus-based analysis (ignore above)
+Data <-
+  Data |> 
+  filter(!is.na(Genus)) |>
+  filter(!is.na(Age.3)) |> # Remove occurrences without age-designation.
+  # Remove invalid taxa.
+  filter(!Species %in% c("Palaeohypotodus rutori")) |>  # Not valid according (Ebersole et al. 2024, also not found in Guinot's dataset).
+  # Final corrections.
+  mutate(Species = case_when(Species == "Isurolamna inflata" ~ "Isurolamna affinis", T ~ Species)) |>  # Popov and Vladimir A. Lopyrev 2024.
+  # mutate(Genus = case_when(Species == "Palaeotriakis subserratus" ~ "Palaeotriakis", T ~ Genus)) |>
+  mutate(Genus = case_when(Species == "Eostriatolamia latus" ~ "Eostriatolamia", T ~ Genus)) |>
+  mutate(Genus = case_when(Species == "Xampylodon brotzeni" ~ "Xampylodon",
+                           Species == "Xampylodon dentatus" ~ "Xampylodon",
+                           Species == "Xampylodon loozi" ~ "Xampylodon", T ~ Genus)) |> 
+  mutate(Genus = case_when(Species == "Palaeocarcharodon orientalis" ~ "Palaeocarcharodon", T ~ Genus)) |> 
+  mutate(Genus = case_when(Species == "Carcharias cuspidatus" ~ "Carcharias", T ~ Genus)) |> 
+  mutate(Genus = case_when(Species == "Cretalamna nigeriana" ~ "Cretalamna", T ~ Genus)) |> 
+  mutate(Genus = case_when(Species == "Carcharias holmdelensis" ~ "Carcharias", T ~ Genus)) |> 
+  mutate(Genus = case_when(Species == "Palaeotriakis subserratus" ~ "Palaeotriakis", T ~ Genus)) |> 
+  # Denmark occurrences assigned to Megasqualus are changed to Protosqualus in accordance with Guinot and Condamine.
+  mutate(Genus = case_when(Country == "Denmark" & Genus == "Megasqualus" ~ "Protosqualus",TRUE ~ Genus)) |> 
+  # Same for Paratriakis curtirostris which is instead assigned to Palaeotriakis curtirostris
+  mutate(Genus = case_when(Country == "Denmark" & Genus == "Paratriakis" ~ "Palaeotriakis",TRUE ~ Genus)) |>
+  as.data.frame() |>
+  # Remove columns.
+  select(-c("Used","Duplicate","Not_Digitized","Age.2","Age.PD")) # 3,196 occurrences with genus names (2026-06-24).
+
+# Last modifications.
+Data <-
+  Data |> 
+  # Following Cappetta 2021, Historical Biology.
+  mutate(Genus = case_when(Genus == "Notidanodon" & Age.3 == "Thanetian" ~ "Xampylodon", TRUE ~ Genus)) |> 
+  mutate(Genus = case_when(Genus == "Notidanodon" & Country == "U.S.A" ~ "Hexanchus", TRUE ~ Genus))
+
+# Guinot and Condamine 2023, Science.
+guinot_data <-
+  read.xlsx(xlsxFile = "_data/science.abn2080_data_s1.xlsx") |> 
+  filter(Super.Order %in% c("Galeomorphii","Squalomorphii")) |>
+  mutate(Genera = gsub("_.*","", Genus_Species)) |> 
+  rename(Age = `Stage/substage`) |> 
+  filter(grepl(pattern = "Campanian|Maastrichtian|Danian|Selandian|Thanetian",Age)) |> 
+  filter(!grepl(pattern = "Cenomanian|Santonian|Turonian|Coniacian",Age)) |> 
+  filter(!Age %in% c("Campanian-Maastrichtian","Selandian-Thanetian")) |> 
+  mutate(Age = case_when(Age %in% c("Campanian (Lower)","Campanian (Middle)","Campanian (Upper)") ~ "Campanian",T ~ Age)) |> 
+  mutate(Age = case_when(Age %in% c("Maastrichtian (Lower)","Maastrichtian (Upper)") ~ "Maastrichtian",T ~ Age)) |> 
+  mutate(Age = case_when(Age %in% c("Danian","Danian (Lower)","Danian (Upper)","Selandian") ~ "Danian-Selandian",T ~ Age)) |> 
+  mutate(Age = factor(Age, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |> 
+  filter(Genera != "Triakidae-indet.") |> 
+  # Adjust spelling.
+  mutate(Genera = case_when(Genera == "Cretolamna" ~ "Cretalamna",
+                            Genera == "Leptocharias-nov.-gen." ~ "Leptocharias", T ~ Genera)) |> 
+  select(any_of(c("Order","Family","Genus_Species","Age","Country","Region","Coordinates","Reference","Status","Genera")))
+
+# How many genera overlap between the datasets?
+# generics::intersect(unique(Data$Genus),unique(guinot_data$Genera)) 
+
+# 113 (87.6% of genera matches between the two datasets after spelling corrections).
+``` 
+
+## Other data sources
+
+```{r message=FALSE}
+# Is there evidence of species dispersing outward to previously un-occupied areas in the K/Pg aftermath?
+# If yes, then which ones?
+guinot_mas <-
+  guinot_data |> filter(Age == "Maastrichtian") |> 
+  mutate(Genus = Genus_Species) |> 
+  mutate(Genus = gsub(pattern = "_.*",x = Genus,replacement = "")) |> 
+  mutate(Genus = case_when(Genus == "Cretolamna" ~ "Cretalamna",T ~ Genus))
+
+guinot_dan <- 
+  guinot_data |> 
+  filter(Age == "Danian-Selandian") |> 
+  mutate(Genus = Genus_Species) |> 
+  mutate(Genus = gsub(pattern = "_.*",x = Genus,replacement = "")) |> 
+  mutate(Genus = case_when(Genus == "Cretolamna" ~ "Cretalamna",T ~ Genus))
+
+# Add continent to the dataset.
+guinot_data |> 
+  filter(!grepl(pattern = "_sp.",x = Genus_Species)) |> 
+  # mutate(Continent = NA) |> 
+  # mutate(Continent = case_when(Country %in% c("Morocco","Angola","Niger","Togo","Senegal",
+  #                                             "Democratic Republic of Congo","Nigeria",
+  #                                             "Madagascar","Egypt","Tunisia","Algeria","Libya") ~ "Africa",
+  #                              Country %in% c("France","United Kingdom","Belgium","Sweden","Denmark",
+  #                                             "Bulgaria","Netherlands","Germany","Spain","Russia",
+  #                                             "Lithuania","Ukraine","Svalbard & Jan Mayen, Island") ~ "Europe",
+  #                              Country %in% c("Kazakhstan","Syria","India","Jordan","Japan","Israel","Uzbekistan",
+  #                                             "Turkmenistan","Armenia") ~ "Asia",
+  #                              Country %in% c("United States","Canada","Trinidad and Tobago","Greenland","Jamaica") ~ "North America",
+  #                              Country %in% c("Argentina","Brazil","Chile","Venezuela") ~ "South America",
+  #                              Country == "New Zealand" ~ "Oceania",
+  #                              Country == "Antarctica" ~ "Antarctica", T ~ Continent)) |> 
+  filter(Age %in% c("Maastrichtian", "Danian-Selandian")) |> 
+  # Keep taxa that survive into the Danian.
+  filter(Genus_Species %in% generics::intersect(guinot_mas$Genus_Species,guinot_dan$Genus_Species)) |> 
+  distinct(Genus_Species, Age, Country) |> 
+  group_by(Genus_Species, Age) |>
+  summarise(count_country = n_distinct(Country)) |>
+  ggplot(mapping = aes(x = Genus_Species,y = count_country, fill = Age)) +
+  geom_bar(stat = "identity",position = "dodge") +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1,vjust = 1))
+
+# Genus difference between the time bins.
+guinot_data |> 
+  filter(Age %in% c("Campanian","Maastrichtian", "Danian-Selandian","Thanetian")) |> 
+  mutate(Genus = Genus_Species) |> 
+  mutate(Genus = gsub(pattern = "_.*",x = Genus,replacement = "")) |> 
+  group_by(Age) |>
+  summarise(n_distinct(Genus))
+```
+
+## Paleocoordinates
+
+Paleocoordinates were reconstructed based on present-day site coordinates (i.e. latitude and longitude). This was achieved using the `rgplates` v. 0.6.0 R package. Chronostratigraphic intervals are referenced by their start ages.
+
+```{r}
+# Split data by age.
+age_split <- split(Data,Data$Age.3) # Creates a list.
+
+# Paleocoordinates.
+campan_coords <- reconstruct(x = age_split[[1]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 83.6)  # Campanian
+maastr_coords <- reconstruct(x = age_split[[3]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 72.2)  # Maastrichtian
+danian_coords <- reconstruct(x = age_split[[2]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 66.00) # Danian-Selandian.
+thanet_coords <- reconstruct(x = age_split[[4]][,19:20] |> relocate(Latitude,.after = "Longitude"),age = 59.24) # Thanetian
+
+# Append paleocoordinates.
+spatial_data <-
+  rbind(
+  cbind(age_split[[1]],campan_coords),
+  cbind(age_split[[3]],maastr_coords),
+  cbind(age_split[[2]],danian_coords),
+  cbind(age_split[[4]],thanet_coords)
+)
+```
+
+```{r}
+# Number of occurrences by country.
+p1 <-
+  spatial_data |>
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
+  group_by(Country,Age.3) |> 
+  count() |> 
+  ggplot(mapping = aes(x = Country, y = n, fill = Age.3)) + 
+  geom_col(color= "#A5A9AE",linewidth = .5) +
+  scale_fill_manual(values =   c("#3a508b","#be3d6e","#000000","#527D73")) +
+  scale_colour_manual(values = c("#3a508b","#be3d6e","#000000","#527D73")) +
+  geom_hline(yintercept = 10, linetype = 2) +
+  coord_flip() +
+  labs(x = NULL, 
+       y = "Sample size",
+       fill = "Chronostratigraphic age", 
+       title = "Fossil occurrences by country",
+       subtitle = "Vertical line denotes a sample size of 10") +
+  theme_classic() +
+  theme(aspect.ratio = 1.5,
+        axis.text  = element_text(size = 8),
+        legend.title = element_text(face = "bold",size = 8),
+        plot.title = element_blank(),
+        plot.subtitle = element_blank(),
+        axis.title = element_text(face = "bold",size = 9))
+
+# Plot maps.
+world <- ne_countries(returnclass = "sf")
+
+p2 <- 
+  ggplot(data = world) +
+  geom_sf(fill= "#A5A9AE") +
+  geom_point(
+    data = 
+      spatial_data |>
+      mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+      mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))),
+    aes(x = Longitude, y = Latitude, color = Age.3),size = 2.5) +
+  # coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = FALSE) +
+  # Equator.
+  geom_hline(yintercept = 0, linetype = 2, colour = "black") +
+  # Panels.
+  facet_wrap(~ Age.3,ncol = 1) +
+  scale_colour_manual(values = c("#3a508b","#be3d6e","#000000","#527D73")) +
+  labs(x = "Longitude",y = "Latitude", color = NULL) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.background = element_rect(fill = "aliceblue"),
+        strip.text = element_text(face = "bold"),
+        axis.text.y = element_text(angle = 90,vjust = .5,hjust = .5,size = 8),
+        axis.text.x = element_text(size = 8),
+        axis.title = element_text(face = "bold",size = 9),
+        legend.position = "none"
+        )
+
+# Number of occurrences by order.
+p3 <- 
+  spatial_data |>
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
+  group_by(Order,Age.3) |> 
+  count() |> 
+  ggplot(mapping = aes(x = Order, y = n, fill = Order)) +
+  geom_bar(stat = "identity", fill = "#252525") +
+  coord_flip() +
+  labs(x = NULL, y = "Sample size",title = "Fossil occurrences by taxonomic hierarchy",subtitle = "Shark orders") +
+  facet_wrap(.~ Age.3, scales = "free") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        strip.text =element_text(face = "bold"),
+        aspect.ratio = 1.5,
+        legend.title = element_text(face = "bold"),
+        axis.text  = element_text(size = 8),
+        plot.title = element_text(face = "bold"),
+        axis.title = element_text(face = "bold",size = 10))
+
+# Number of occurrences by genus.
+p4 <- 
+  spatial_data |> 
+  filter(Superorder == "Galeomorphii") |> 
+  filter(Order %in% c("Lamniformes","Carcharhiniformes")) |> 
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
+  mutate(Order = factor(Order, levels = c("Lamniformes","Carcharhiniformes"))) |> 
+  group_by(Genus,Order,Age.3) |> 
+  count() |> 
+  ggplot(mapping = aes(x = Genus, y = n, fill = Age.3)) +
+  geom_bar(stat = "identity", col = "#A5A9AE") +
+  scale_fill_manual(values =   c("#3a508b","#be3d6e","#000000","#527D73")) +
+  scale_colour_manual(values = c("#3a508b","#be3d6e","#000000","#527D73")) +
+  coord_flip() +
+  labs(x = NULL, y = "Sample Size", fill = "Chronostratigraphic age") +
+  facet_wrap(.~ Order, scales = "free",ncol = 2) +
+  theme_bw() +
+  theme(panel.grid=element_blank(),
+        plot.title = element_text(size = 8, face = "bold"),
+        axis.title = element_text(size = 8,face = "bold"),
+        axis.text = element_text(size = 6),
+        axis.text.y = element_text(face = "italic"),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6),
+        legend.key.width =  unit(3, "mm"),
+        legend.key.height = unit(3, "mm"),
+        aspect.ratio = 1.5)
+
+p5 <- 
+  spatial_data |> 
+  filter(Superorder == "Squalomorphii") |> 
+  filter(!Order %in% c("Lamniformes","Carcharhiniformes")) |> 
+  filter(Order %in% c("Squaliformes","Hexanchiformes")) |> 
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
+  group_by(Genus,Order,Age.3) |> 
+  count() |> 
+  ggplot(mapping = aes(x = Genus, y = n, fill = Age.3)) +
+  geom_bar(stat = "identity", col = "#A5A9AE") +
+  scale_fill_manual(values =   c("#3a508b","#be3d6e","#000000","#527D73")) +
+  scale_colour_manual(values = c("#3a508b","#be3d6e","#000000","#527D73")) +
+  coord_flip() +
+  labs(x = NULL, y = "Sample Size") +
+  facet_wrap(.~ Order, scales = "free",ncol = 2) +
+  theme_bw() +
+  theme(panel.grid=element_blank(),
+        plot.title = element_text(size = 8, face = "bold"),
+        axis.title = element_text(size = 8,face = "bold"),
+        axis.text = element_text(size = 6),
+        axis.text.y = element_text(face = "italic"),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6),
+        legend.key.width =  unit(3, "mm"),
+        legend.key.height = unit(3, "mm"),
+        aspect.ratio = 1.5)
+
+p6 <- 
+  spatial_data |> 
+  filter(Superorder == "Squalomorphii") |> 
+  filter(!Order %in% c("Lamniformes","Carcharhiniformes")) |> 
+  filter(!Order %in% c("Squaliformes","Hexanchiformes")) |>   
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
+  group_by(Genus,Order,Age.3) |> 
+  count() |> 
+  ggplot(mapping = aes(x = Genus, y = n, fill = Age.3)) +
+  geom_bar(stat = "identity", col = "#A5A9AE") +
+  scale_fill_manual(values =   c("#3a508b","#be3d6e","#000000","#527D73")) +
+  scale_colour_manual(values = c("#3a508b","#be3d6e","#000000","#527D73")) +
+  coord_flip() +
+  labs(x = NULL, y = "Sample Size") +
+  facet_wrap(.~ Order, scales = "free",ncol = 2) +
+  theme_bw() +
+  theme(panel.grid=element_blank(),
+        plot.title = element_text(size = 8, face = "bold"),
+        axis.title = element_text(size = 8,face = "bold"),
+        axis.text = element_text(size = 6),
+        axis.text.y = element_text(face = "italic"),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom",
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 6),
+        legend.key.width =  unit(3, "mm"),
+        legend.key.height = unit(3, "mm"),
+        aspect.ratio = 1.5)
+
+# Pie chart showing the proportion of taxonomic orders per age.
+p7 <-
+  spatial_data |>
+  group_by(Age.3, Order, Continent) |>
+  summarise(count = n(), .groups = "drop") |>
+  group_by(Age.3, Continent) |>
+  mutate(total = sum(count),
+         prop = count/total) |>
+  ungroup() |>
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian",TRUE ~ Age.3),
+         Age.3 = factor(Age.3, levels = c("Campanian", "Maastrichtian", "Danian-Selandian", "Thanetian"))) |> 
+  # Plot.
+  ggplot(aes(x = "", y = prop, fill = Order)) +
+  geom_bar(stat = "identity", width = .5, colour = "#544948") +
+  scale_fill_manual(values = c("#167288","#8cdaec","#b45248","#d48c84",
+                               "#a89a49","#d6cfa2","#3cb464","#9bddb1",
+                               "#643c6a","#836394")) +
+  # scale_fill_manual(values = order_colours) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  facet_wrap(~ Continent + Age.3) + 
+  theme(axis.text  = element_text(size = 8),
+        plot.title = element_text(face = "bold"),
+        axis.title = element_text(size = 9),legend.position = "none")
+
+# Number of occurrences by source.
+p8 <-
+  spatial_data |>
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian", T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
+  # mutate(Source = case_when(Source == "D. Ward collection" ~ "NHM Collection", T ~ Source)) |> 
+  mutate(Source = factor(Source, levels = c("WAM Collection","AMNH Collection","McWane Collection",
+                                             setdiff(sort(unique(Source)), c("WAM Collection","AMNH Collection","McWane Collection"))))) |>
+  group_by(Source,Age.3) |> 
+  count() |> 
+  ggplot(mapping = aes(x = Source, y = n, fill = Age.3)) + 
+  geom_col() +
+  scale_fill_manual(values =   c("#3a508b","#be3d6e","#000000","#527D73")) +
+  scale_colour_manual(values = c("#3a508b","#be3d6e","#000000","#527D73")) +
+  coord_flip() +
+  geom_vline(xintercept = 3.5, linetype = 2) +
+  labs(x = NULL, y = "Sample size", fill = "Age",title = "Fossil occurrences by source type",
+       subtitle = "Collections vs. Literature") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        strip.text =element_text(hjust=0,face = "bold"),
+        aspect.ratio = 3,
+        legend.position = "none",
+        axis.text  = element_text(size = 8),
+        plot.title = element_blank(),
+        plot.subtitle = element_blank(),
+        axis.title = element_text(face = "bold",size = 9))
+```
+
+## Grid system
+
+We selected the spatial resolution that yielded the greatest number of grid cells in each time bin. Finally, we extracted the geographic centroids of the retained cells and merged this information back into the dataset to support downstream spatial analysis.
+
+```{r message=FALSE,results='hide'}
+# First determine the coarseness of the cells.
+hex_list <- vector(mode = "list")
+
+for(i in seq(1:9)) {
+  equal_cell_grid <- hexagrid(deg = i, sf = TRUE)
+  hex_list[[i]] <- equal_cell_grid
+}
+
+# What resolution provides the highest number of cells?
+ages <- c("Campanian",
+          "Maastrichtian", 
+          "Danian-Selandian",
+          "Thanetian"
+          )
+
+resolutions <- c("111.11 km",
+                 "222.17 km",
+                 "341.83 km",
+                 "444.21 km",
+                 "555.24 km",
+                 "634.86 km",
+                 "740.36 km",
+                 "889.08 km",
+                 "1111.25 km"
+                 )
+
+# Function.
+table_matrix <- function(x, age = NULL) {
+  
+  results <- numeric(length(hex_list))
+  
+  for (i in seq_along(hex_list)) {
+    
+    number_of_cells <- 
+      spatial_data |>
+      filter(Age.3 == age) |> 
+      mutate(cell = locate(x = hex_list[[i]],y = spatial_data[spatial_data$Age.3 == age, ] |> select("paleolong", "paleolat"))) |>
+      group_by(cell) |>
+      count() |>
+      arrange(desc(n)) |>
+      nrow()
+    
+    results[i] <- number_of_cells
+  }
+  
+  return(results)
+}
+
+# Campanian.
+grid_cells_campanian <- 
+  data.frame(cells = table_matrix(spatial_data,age = "Campanian"),Age = c("Campanian"))
+# Maastrichtian.
+grid_cells_maastrichtian <- 
+  data.frame(cells = table_matrix(spatial_data,age = "Maastrichtian"),Age = c("Maastrichtian"))
+# Danian-Selandian.
+grid_cells_danian <- 
+  data.frame(cells = table_matrix(spatial_data,age = "DanSelCombined"),Age = c("Danian-Selandian"))
+# Thanetian.
+grid_cells_thanetian <- 
+  data.frame(cells = table_matrix(spatial_data,age = "Thanetian"),Age = c("Thanetian"))
+
+# Combine results.
+p9 <-
+  bind_rows(grid_cells_campanian,grid_cells_maastrichtian,
+          grid_cells_danian,grid_cells_thanetian) |>
+  mutate(Degree = c(rep(resolutions,4))) |> 
+  mutate(Age = factor(Age, levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |>
+  mutate(Degree = factor(Degree, levels = c(resolutions))) |> 
+  # Plot.
+  ggplot(aes(x = Degree, y = cells, color = Age)) +
+  geom_point(size = 3, shape = 19) +
+  scale_fill_manual(values =   c("#3a508b","#be3d6e","#000000","#527D73")) +
+  scale_colour_manual(values = c("#3a508b","#be3d6e","#000000","#527D73")) +
+  geom_line(aes(group = Age)) +
+  geom_vline(xintercept = 2,linewidth = 1,linetype = 2) +
+  labs(x = "Resolution", y = "Number of cells", color = "Age") +
+  # facet_wrap(.~Degree, scales = "free") +
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 8),
+        axis.text.x = element_text(size = 8,angle = 45,hjust = .5,vjust = .5),
+        axis.title = element_text(size= 9, face = "bold"),
+        legend.title = element_text(size = 9, face = "bold"),
+        legend.text = element_text(size = 8),
+        aspect.ratio = 1)
+```
+
+```{r message=FALSE, warning=FALSE, results='hide'}
+# Set up the grid.
+clean_spatial_data <-
+  rbind(
+  # Campanian.
+  spatial_data |>
+  filter(Age.3 == "Campanian") |> 
+  mutate(cell = locate(x = hex_list[[2]],y = spatial_data[spatial_data$Age.3 == "Campanian",] |> select("paleolong", "paleolat"))),
+  # Maastrichtian.
+  spatial_data |> 
+  filter(Age.3 == "Maastrichtian") |> 
+  mutate(cell = locate(x = hex_list[[2]],y = spatial_data[spatial_data$Age.3 == "Maastrichtian",] |> select("paleolong", "paleolat"))), 
+  # Danian/Selandian.
+  spatial_data |> 
+  filter(Age.3 == "DanSelCombined") |> 
+  mutate(cell = locate(x = hex_list[[2]],y = spatial_data[spatial_data$Age.3 == "DanSelCombined",] |> select("paleolong", "paleolat"))),
+  # Thanetian.
+  spatial_data |> 
+  filter(Age.3 == "Thanetian") |> 
+  mutate(cell = locate(x = hex_list[[2]],y = spatial_data[spatial_data$Age.3 == "Thanetian",] |> select("paleolong", "paleolat")))
+)
+
+# Compute cell centroids.
+cell_preparation <- function(data,age,hexa,min_occurrence = NULL) {
+  # Subset by age.
+  data <- data |> filter(Age.3 == age)
+  # Count occurrences per cell and filter by minimum occurrence.
+  data <- 
+    data |>
+    group_by(cell) |>
+    mutate(occs = n()) |> 
+    ungroup() |> 
+    filter(occs >= min_occurrence)
+  
+  # Retained cells.
+  cells_to_keep <- unique(data$cell)
+  cell_centroids <- 
+    as.data.frame(centers(hexa))[cells_to_keep, , drop = FALSE] |>
+    rownames_to_column(var = "cell")
+  
+  # Merge centroid-value.
+  data <- data |> left_join(cell_centroids, by = "cell")
+  
+  return(data)
+}
+
+# Cell assignment.
+campanian_cells <- cell_preparation(data = clean_spatial_data,
+                                    age = "Campanian",
+                                    hexa = hex_list[[2]],
+                                    min_occurrence = 10)
+
+maastrich_cells <- cell_preparation(data = clean_spatial_data,
+                                    age = "Maastrichtian",
+                                    hexa = hex_list[[2]],
+                                    min_occurrence = 10)
+
+daniansel_cells <- cell_preparation(data = clean_spatial_data,
+                                    age = "DanSelCombined",
+                                    hexa = hex_list[[2]],
+                                    min_occurrence = 10)
+
+thanetian_cells <- cell_preparation(data = clean_spatial_data,
+                                    age = "Thanetian",
+                                    hexa = hex_list[[2]],
+                                    min_occurrence = 10)
+# Combine.
+clean_spatial_data <- bind_rows(campanian_cells,
+                                maastrich_cells,
+                                daniansel_cells,
+                                thanetian_cells) # 3,048 specimens in total.
+
+# Create unique identifier for each cell.
+clean_spatial_data <-
+  data.frame(unique(clean_spatial_data$cell)) |> # 44 unique cells.
+  setNames(nm = "cell") |> 
+  mutate(cell_id = c(1:length(cell))) |> 
+  inner_join(clean_spatial_data,by = "cell")
+
+# A resolution of 1 degree for the Campanian and Maastrichtian grid space.
+cretaceous_data <-
+  rbind(
+  # Campanian.
+  spatial_data |>
+  filter(Age.3 == "Campanian") |> 
+  mutate(cell = locate(x = hex_list[[1]],y = spatial_data[spatial_data$Age.3 == "Campanian",] |> select("paleolong", "paleolat"))),
+  # Maastrichtian.
+  spatial_data |> 
+  filter(Age.3 == "Maastrichtian") |> 
+  mutate(cell = locate(x = hex_list[[1]],y = spatial_data[spatial_data$Age.3 == "Maastrichtian",] |> select("paleolong", "paleolat")))
+) # 1,989 specimens.
+
+clean_cretaceous_data <-
+  bind_rows(
+  # Campanian.
+  cell_preparation(data = cretaceous_data,
+                   age = "Campanian",
+                   hexa = hex_list[[1]],
+                   min_occurrence = 10),
+  # Maastrichtian.
+  cell_preparation(data = cretaceous_data,
+                   age = "Maastrichtian",
+                   hexa = hex_list[[1]],
+                   min_occurrence = 10)
+)
+
+clean_cretaceous_data <-
+  data.frame(unique(clean_cretaceous_data$cell)) |> # 35 unique cells.
+  setNames(nm = "cell") |> 
+  mutate(cell_id = c(1:length(cell))) |> 
+  inner_join(clean_cretaceous_data,by = "cell") # 1,862 specimens.
+```
+
+## Shared taxa
+
+```{r}
+# Shared cells between the Maastrichtian and the Danian-Selandian.
+shared_cells_kpg <-
+  generics::intersect(x = unique(clean_spatial_data[clean_spatial_data$Age.3 == "Maastrichtian",]$cell),
+                      y = unique(clean_spatial_data[clean_spatial_data$Age.3 == "DanSelCombined",]$cell)
+                      ) # 4 shared cells.
+
+# Taxonomic composition of shared cells.
+p10 <-
+  clean_spatial_data |>
+  filter(Age.3 %in% c("Maastrichtian","DanSelCombined")) |> 
+  filter(cell %in% shared_cells_kpg) |>
+  group_by(Order,cell,Age.3) |> 
+  summarise(n = n_distinct(Genus)) |> 
+  ggplot(mapping = aes(x = cell, y = n, fill = Order)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("#167288","#8cdaec","#b45248","#d48c84",
+                               "#a89a49","#d6cfa2","#9bddb1",
+                               "#643c6a","#836394")) +
+  facet_wrap(.~ Age.3,scales = "free",ncol = 1) +
+  theme_bw() +
+  theme(aspect.ratio= .8)
+```
+
+```{r}
+# Cell expansion?
+mas_genera <-
+  clean_spatial_data |> 
+  filter(Age.3 == "Maastrichtian") |> 
+  select(Genus,cell,Order)
+
+dan_genera <-
+  clean_spatial_data |> 
+  filter(Age.3 == "DanSelCombined") |> 
+  select(Genus,cell,Order)
+
+survived_genera <- 
+  generics::intersect(x = mas_genera$Genus,y = dan_genera$Genus) # 27 genera.
+
+p11 <-
+  clean_spatial_data |> 
+  filter(Age.3 %in% c("Maastrichtian","DanSelCombined")) |>
+  mutate(Age.3 = case_when(Age.3 == "DanSelCombined" ~ "Danian-Selandian",T ~ Age.3)) |> 
+  mutate(Age.3 = factor(Age.3,levels = c("Maastrichtian","Danian-Selandian"))) |> 
+  # Taxa.
+  filter(Genus %in% survived_genera) |>
+  # Arrange genus by Order.
+  mutate(Genus = factor(Genus, levels = c("Crassescyliorhinus","Galeorhinus","Palaeogaleus","Palaeotriakis","Scyliorhinus",
+                                          "Echinorhinus","Heterodontus","Chlamydoselachus","Hexanchus","Sphenodus","Xampylodon",
+                                          "Anomotodon","Carcharias","Cretalamna","Odontaspis","Ginglymostoma","Hemiscyllium","Nebrius",
+                                          "Pararhincodon","Centrodeania","Centroscymnus","Cretascymnus","Incognitorapax","Squalus",
+                                          "Parasquatina","Squatina","Synechodus"))) |> 
+  # distinct(Genus,Order) |> count(Order)
+  # arrange(-desc(Genus)) |>
+  distinct(Genus, Age.3, cell,Order) |> 
+  group_by(Genus, Order, Age.3) |> 
+  summarise(n_cells = n(), .groups = "drop") |> 
+  ggplot(mapping = aes(x = n_cells, y = Genus,fill = Age.3)) +
+  geom_bar(stat = "identity",position = "dodge",linewidth = .5,color = "black") +
+  scale_color_manual(values = c("#F2FA8C","#FDB462")) +
+  scale_fill_manual(values =  c("#F2FA8C","#FDB462")) +
+  labs(x = "Number of cells", y = "Genera") +
+  coord_flip() +
+  theme_bw(base_size = 12) +
+  theme(aspect.ratio = .5,
+        axis.text.x = element_text(vjust = 1,hjust = 1,angle = 45,face = "italic"),
+        panel.grid = element_blank(),
+        legend.position = "right",
+        axis.title = element_text(face = "bold", size = 9),
+        axis.text = element_text(size = 9),
+        axis.text.y = element_text(angle = 90,hjust = .5,vjust = .5),
+        legend.title = element_blank()
+        ) # Nothing in particular stand out here.
+
+# ggarrange(p11,p11,nrow = 2)
+
+# Confirm that these genera are in Guinot's dataset.
+guinot_surviving_taxa <- 
+  guinot_data |> 
+  filter(Age %in% c("Maastrichtian", "Danian-Selandian")) |>
+  # Keep taxa that survive into the Danian.
+  mutate(Genus = Genus_Species) |> 
+  mutate(Genus = gsub(pattern = "_.*",x = Genus,replacement = "")) |> 
+  mutate(Genus = case_when(Genus == "Cretolamna" ~ "Cretalamna",T ~ Genus)) |> 
+  filter(Genus %in% generics::intersect(guinot_mas$Genus,guinot_dan$Genus)) |> 
+  distinct(Genus,Order)
+  # pull(Genus) # 29 surviving shark taxa.
+
+# Which ones are different?
+generics::setdiff(x = survived_genera, y = guinot_surviving_taxa$Genus)
+generics::setdiff(x = guinot_surviving_taxa$Genus, y = survived_genera)
+
+# Note: Jaekelotodus we have decided to keep.
+# Note: Pristiophorus and Chiloscyllium are known from both the Maastrichtian and the Danian, but missing here.
+```
+
+## Relative	Abundance	Corrected	beta	diversity
+
+**RACB using coverage of 0.7**
+
+```{r eval = FALSE}
+## Relative	Abundance	Corrected	beta diversity.
+source("_functions/RACB.R")
+
+# Prepare association matrices.
+mX <-
+  clean_spatial_data |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","DanSelCombined","Thanetian"))) |>
+  group_split(Age.3)
+
+# Non-incidence based data.
+nG <-list()
+for(i in seq_along(mX)) {
+
+  racb_genera <-
+    mX[[i]] |>
+    group_by(cell, Genus) |>
+    count() |>
+    pivot_wider(names_from = cell, values_from = n, values_fill = 0) |>
+    as.data.frame() |>
+    column_to_rownames(var = "Genus")
+
+  nG[[i]] <- racb_genera
+}
+
+names(nG) <- c("Campanian", "Maastrichtian", "DanSelCombined", "Thanetian")
+
+# Are there any cells that only have one genus?
+lapply(nG, function(x) nrow(x) - colSums(x== 0)) # Yes, remove these before analysis.
+
+# Remove any cell with only 1 taxa.
+nG$Maastrichtian <- nG$Maastrichtian[,-12] # F490 is removed. 18 grid cells remaining.
+
+# Coverage function.
+goods_coverage <- function(x) {
+  
+  # Total occurrences per column.
+  n_occs <- colSums(x)
+  # Singletons per column.
+  f1 <- colSums(x == 1)
+  
+  coverage <- 1 - (f1/n_occs)
+  
+  return(coverage)
+}
+
+# Coverage levels across geological stages.
+genera_coverage <- lapply(nG,goods_coverage)
+
+set.seed(1)
+racb_cmp <- RACB.Diversity(data =  nG$Campanian,
+                           metric = "Sorenson",
+                           sim.iter = 100,
+                           samp.stand = TRUE,
+                           samp.stand.size = 0.7,
+                           samp.stand.iter = 100
+                           ) 
+
+# Remove brackish or freshwater environments, and deep-water assembalges.
+# "F247" Deep-water setting (Hornby Island, British Columbia).
+# "F900" Includes one assemblage (Lowerverse locality, West Texas) that is Brackish water inter-tidal depositional setting
+
+set.seed(2)
+racb_cmp_exclude <- RACB.Diversity(data = nG$Campanian |> select(-c("F247","F900")) |> filter(rowSums(across(where(is.numeric)))!=0),
+                                   metric = "Sorenson",
+                                   sim.iter = 100,
+                                   samp.stand = TRUE,
+                                   samp.stand.size = 0.7,
+                                   samp.stand.iter = 100)
+ 
+# Maastrichtian.
+set.seed(3)
+racb_mas <- RACB.Diversity(data =  nG$Maastrichtian,
+                           metric = "Sorenson",
+                           sim.iter = 100,
+                           samp.stand = TRUE,
+                           samp.stand.size = 0.7,
+                           samp.stand.iter = 100)
+
+# Assemblage to be removed.
+
+# F1021 = Deep-marine succession (Oberwaldgraben section)
+# F3647 = Inter- to subtidal deposits under an estuarine regime (Calafate Formation)
+# F359  = Freshwater fluvial/lacustrine (Hell Creek Formation)
+set.seed(4)
+racb_mas_exclude <- RACB.Diversity(data = nG$Maastrichtian |> select(-c("F1021","F3647","F359")) |> filter(rowSums(across(where(is.numeric)))!=0),
+                                   metric = "Sorenson",
+                                   sim.iter = 100, 
+                                   samp.stand = TRUE,
+                                   samp.stand.size = 0.7,
+                                   samp.stand.iter = 100)
+
+# Danian-Selandian.
+set.seed(5)
+racb_dan <- RACB.Diversity(data =  nG$DanSelCombined,
+                           metric = "Sorenson",
+                           sim.iter = 100, 
+                           samp.stand = TRUE,
+                           samp.stand.size = 0.7,
+                           samp.stand.iter = 100)
+
+# Non-marine?
+# F926 = Deep-marine setting
+# F903 = Estuarine setting ... F490 was not used in the analysis (is a freshwater setting with one taxa)
+set.seed(6)
+racb_dan_exclude <- RACB.Diversity(data =  nG$DanSelCombine |> select(-c("F926","F903")) |> filter(rowSums(across(where(is.numeric)))!=0),
+                                   metric = "Sorenson",
+                                   sim.iter = 100, 
+                                   samp.stand = TRUE,
+                                   samp.stand.size = 0.7,
+                                   samp.stand.iter = 100)
+
+# Thanetian.
+set.seed(7)
+racb_tha <- RACB.Diversity(data = nG$Thanetian,
+                       metric = "Sorenson",
+                       sim.iter = 100, 
+                       samp.stand = TRUE,
+                       samp.stand.size = 0.7,
+                       samp.stand.iter = 100)
+```
+
+**RACB using coverage of 0.8**
+
+```{r eval = FALSE}
+# Campanian: cells that needs to be removed.
+set.seed(8)
+cmp_0.8 <- 
+  RACB.Diversity(data = nG$Campanian |> select(-c("F1003","F3028","F655","F738","F740")) |> filter(rowSums(across(where(is.numeric)))!=0),
+                 metric = "Sorenson",
+                 sim.iter = 100,
+                 samp.stand = TRUE,
+                 samp.stand.size = 0.8,
+                 samp.stand.iter = 100
+                 ) 
+set.seed(9)
+mas_0.8 <-
+  RACB.Diversity(data = nG$Maastrichtian |> select(-c("F359","F3755","F579","F657","F809","F906")) |> filter(rowSums(across(where(is.numeric)))!=0),
+                 metric = "Sorenson",
+                 sim.iter = 100,
+                 samp.stand = TRUE,
+                 samp.stand.size = 0.8,
+                 samp.stand.iter = 100
+                 )
+
+set.seed(10)
+dan_0.8 <- 
+  RACB.Diversity(data = nG$DanSelCombined |> select(-c("F809","F814","F926")) |> filter(rowSums(across(where(is.numeric)))!=0),
+                 metric = "Sorenson",
+                 sim.iter = 100,
+                 samp.stand = TRUE,
+                 samp.stand.size = 0.8,
+                 samp.stand.iter = 100
+                 )
+set.seed(11)
+tha_0.8 <-
+  RACB.Diversity(data = nG$Thanetian |> select(-c("F3369","F582","F656","F827")) |> filter(rowSums(across(where(is.numeric)))!=0) ,
+                 metric = "Sorenson",
+                 sim.iter = 100,
+                 samp.stand = TRUE,
+                 samp.stand.size = 0.8,
+                 samp.stand.iter = 100
+                 )
+
+Z <- 
+  bind_rows(cmp_0.8,mas_0.8,dan_0.8,tha_0.8) |>
+  mutate(Age = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian")) |> 
+  mutate(Age = factor(Age,levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |> 
+  # Null model ribbon.
+  ggplot(aes(x = Age, group = 1)) +
+  # geom_ribbon(aes(ymin = `Null Lower`, ymax = `Null Upper`), fill = "#544948", alpha = 0.5) +
+  # geom_line(aes(y = `Null Expectation`, color = "Null Expectation"), linetype = "dashed", linewidth = 1) +
+  geom_errorbar(aes(ymin = `RAC Lower`, ymax = `RAC Upper`,color = "RACB"),width = 0.1, linewidth = 1) +
+  # Points for the actual values.
+  geom_point(aes(y = `RAC Beta Diversity`), size = 3,shape = 21, fill = "white") +
+  geom_vline(xintercept = c(2.5), linetype = 1, linewidth = 1, col = "#544948") +
+  labs(x = "Age", y = "RAC beta	diversity\n(Sørenson taxonomic distance)", color = "Metric") +
+  theme_bw() +
+  theme(legend.position = "right",
+        aspect.ratio = 1,
+        panel.grid = element_blank(),
+        axis.title = element_text(size = 9,face = "bold"),
+        axis.text = element_text(size = 9),
+        axis.text.y = element_text(angle = 0,vjust = .5,hjust = .5))
+# 
+# ggsave(
+#   filename = "TimeSeries.pdf",
+#   plot = Z,
+#   width = 7.43,
+#   height = 6.37,
+#   units = "in"
+# )
+```
+
+```{r eval = FALSE}
+# Combine test results.
+sens_results <-
+  bind_rows(racb_cmp_exclude,racb_mas_exclude,racb_dan_exclude)[5:7] |> 
+  mutate(Age = c("Campanian", "Maastrichtian", "Danian-Selandian")) |> 
+  mutate(Age = factor(Age,levels = c("Campanian","Maastrichtian","Danian-Selandian")))
+
+# RACB with coverage sub-sampling using 0.7 coverage level.
+p12 <-
+  bind_rows(racb_cmp,racb_mas,
+            racb_dan,racb_tha) |> 
+  mutate(Age = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian")) |> 
+  mutate(Age = factor(Age,levels = c("Campanian","Maastrichtian","Danian-Selandian","Thanetian"))) |> 
+  # Null model ribbon.
+  ggplot(aes(x = Age, group = 1)) +
+  # geom_hline(yintercept = c(0,1)) +
+  # geom_ribbon(aes(ymin = `Null Lower`, ymax = `Null Upper`), fill = "#544948", alpha = 0.5) +
+  # geom_line(aes(y = `Null Expectation`, color = "Null Expectation"), linetype = "dashed", linewidth = 1) +
+  # Raw Beta
+  # geom_line(aes(y = `Raw Beta Diversity`, color = "Raw Beta Diversity"), linewidth = 1.2) +
+  # RAC Beta with ribbon
+  # geom_ribbon(aes(ymin = `Null Lower` RAC_Lower, ymax = RAC_Upper), fill = "#175E54", alpha = 0.2) +
+  # geom_line(aes(y = `RAC Beta Diversity`, color = "RAC Beta Diversity"), size = 1.2) +
+  geom_errorbar(aes(ymin = `RAC Lower`, ymax = `RAC Upper`,color = "RAC Beta Diversity"),width = 0.1, linewidth = 1) +
+  # Points for the actual values
+  geom_point(aes(y = `RAC Beta Diversity`), size = 3,shape = 21,fill = "white", color = "black") +
+   # Sensitivity results
+  geom_errorbar(data = sens_results,aes(ymin = `RAC Lower`,ymax = `RAC Upper`,color = "Sensitivity"),
+                width = 0.1,linewidth = 1,linetype = 2) +
+  geom_point(data = sens_results,aes(y = `RAC Beta Diversity`,color = "Sensitivity"),shape = 24,size = 3, fill = "white") +
+  geom_vline(xintercept = c(2.5), linetype = 2, linewidth = 1, col = "#B83A4B") +
+  scale_color_manual(values = c("RAC Beta Diversity" = "black",
+                                "Sensitivity" = "#E69F00")) +
+  labs(x = "Age", y = "RAC beta	diversity\n(Sørenson taxonomic distance)", color = "Metric") +
+  theme_bw(base_size = 9) +
+  theme(legend.position = "right",
+        aspect.ratio = 1,
+        panel.grid = element_blank(),
+        plot.title = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.text.y = element_text(angle = 0,vjust = .5,hjust = .5))
+
+# ggsave(
+#   filename = "TimeSeries.pdf",
+#   plot = p12,
+#   width = 7.43,
+#   height = 6.37,
+#   units = "in"
+# )
+
+# Order representation across time.
+p13 <- 
+  clean_spatial_data |> 
+  mutate(Age.3 = factor(Age.3, levels = c("Campanian","Maastrichtian","DanSelCombined","Thanetian"))) |>
+  group_by(Age.3, Order) |> 
+  summarise(Genera = n_distinct(Genus), .groups = "drop") |>
+  # group_by(Age.3) |> 
+  # mutate(prop = Genera / sum(Genera)) |>
+  ggplot(aes(x = Age.3, y = Genera, fill = Order)) +
+  geom_bar(stat = "identity", width = .5, colour = "#544948") +
+  # coord_polar("y", start = 0) +
+  scale_fill_manual(values = c("#167288","#8cdaec","#b45248","#d48c84",
+                               "#a89a49","#d6cfa2","#3cb464","#9bddb1",
+                               "#643c6a","#836394")) +
+  # facet_wrap(. ~ Age.3, nrow = 1, scales = "free") +
+  labs(x = "Age") +
+  theme_bw() +
+  theme(legend.position = "right",
+        aspect.ratio = 1,
+        panel.grid = element_blank(),
+        plot.title = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.text.y = element_text(angle = 90,vjust = .5,hjust = .5))
+
+# ggarrange(p7,p9,nrow = 1, widths = c(5,5))
+```
+
+```{r}
+# Can pie-charts showing number of formations/biozones each cell includes
+
+# centroids <- 
+#   mas_hexa %>%
+#   st_centroid() %>%
+#   mutate(face_id = faces) %>%
+#   select(face_id, geometry)
+
+# links <- dan_results$jac |> 
+#   filter(cell_x %in% shared_cells_kpg) |> 
+#   filter(cell_y %in% shared_cells_kpg)
+# 
+# links_sf <- links %>%
+#   left_join(centroids, by = c("cell_x" = "face_id")) %>%
+#   rename(geom_x = geometry) %>%
+#   left_join(centroids, by = c("cell_y" = "face_id")) %>%
+#   rename(geom_y = geometry)
+# 
+# links_sf <- links_sf %>%
+#   mutate(
+#     x1 = st_coordinates(geom_x)[,1],
+#     y1 = st_coordinates(geom_x)[,2],
+#     x2 = st_coordinates(geom_y)[,1],
+#     y2 = st_coordinates(geom_y)[,2]
+#   )
+```
+
+## Raw Jaccard dissimilarity
+
+```{r eval=FALSE}
+# Prepare association matrices.
+mY <- list()
+for(i in seq_along(mX)) {
+  res <- 
+    mX[[i]] |> 
+    distinct(cell,Genus) |>
+    mutate(presence = 1) |>
+    pivot_wider(names_from = Genus, values_from = presence, values_fill = 0) |>
+    column_to_rownames("cell")
+  
+  mY[[i]] <- res
+  }
+
+names(mY) <- c("Campanian","Maastrichtian","DanSelCombined","Thanetian")
+
+# Raw cell-pair dissimilarity computation.
+raw_estimates <- lapply(mY, FUN = function(x) { beta.pair(x,index.family = "jaccard") })
+
+# Campanian results.
+reshape_matrix <- function(x) {
+    x |> 
+    as.matrix() |> 
+    as.table() |> 
+    as.data.frame() |> 
+    setNames(nm = c("cell_x", "cell_y", "value")) |> 
+    mutate(cell_x = as.character(cell_x),cell_y = as.character(cell_y)) |>
+    filter(cell_x != cell_y) |>
+    filter(cell_x < cell_y)
+}
+
+cmp_results <-
+  list(reshape_matrix(x = raw_estimates[[1]]$beta.jac),
+       reshape_matrix(x = raw_estimates[[1]]$beta.jtu),
+       reshape_matrix(x = raw_estimates[[1]]$beta.jne)
+       )
+
+names(cmp_results) <- c("jac","jtu","jne")
+
+# Maastrichtian results.
+mas_results <- 
+  list(reshape_matrix(x = raw_estimates[[2]]$beta.jac),
+       reshape_matrix(x = raw_estimates[[2]]$beta.jtu),
+       reshape_matrix(x = raw_estimates[[2]]$beta.jne)
+       )
+
+names(mas_results) <- c("jac","jtu","jne")
+
+# Danian-Selandian results.
+dan_results <- 
+  list(reshape_matrix(x = raw_estimates[[3]]$beta.jac),
+       reshape_matrix(x = raw_estimates[[3]]$beta.jtu),
+       reshape_matrix(x = raw_estimates[[3]]$beta.jne)
+       )
+
+names(dan_results) <- c("jac","jtu","jne")
+
+# Thanetian results.
+tha_results <- 
+  list(reshape_matrix(x = raw_estimates[[4]]$beta.jac),
+       reshape_matrix(x = raw_estimates[[4]]$beta.jtu),
+       reshape_matrix(x = raw_estimates[[4]]$beta.jne)
+       )
+
+names(tha_results) <- c("jac","jtu","jne")
+```
+
+```{r eval=FALSE}
+# Thanetian.
+p14 <-
+  ggplot(mapping = aes(x = value),data = tha_results$jac) +
+  geom_histogram(color = "#2E2D29") +
+  geom_vline(xintercept = median(tha_results$jac$value),linetype = "dashed",linewidth = 1,color = "#B83A4B") +
+  scale_x_continuous(limits = c(0,1)) +
+  labs(x = "Jaccard dissimilarity", title = "Thanetian") +
+  theme_bw() +
+  theme(aspect.ratio = .5,
+        panel.grid = element_blank(),
+        plot.title = element_text(face = "bold",size = 9),
+        axis.title = element_text(face = "bold",size = 9),
+        axis.text = element_text(size = 9),
+        axis.text.y = element_text(angle = 90,vjust = .5,hjust = .5))
+
+# Danian-Selandian.
+p15 <-
+  ggplot(mapping = aes(x = value),data = dan_results$jac) +
+  geom_histogram(color = "#2E2D29") +
+  geom_vline(xintercept = median(dan_results$jac$value),linetype = "dashed",linewidth = 1,color = "#B83A4B") +
+  scale_x_continuous(limits = c(0,1)) +
+  labs(x = "Jaccard dissimilarity",title = "Danian-Selandian") +
+  theme_bw() +
+  theme(aspect.ratio = .5,
+        panel.grid = element_blank(),
+        plot.title = element_text(face = "bold",size = 9),
+        axis.title = element_text(face = "bold",size = 9),
+        axis.text = element_text(size = 9),
+        axis.text.y = element_text(angle = 90,vjust = .5,hjust = .5))
+
+# Maastrichtian
+p16 <-
+  ggplot(mapping = aes(x = value),data = mas_results$jac) +
+  geom_histogram(color = "#2E2D29") +
+  geom_vline(xintercept = median(mas_results$jac$value),linetype = "dashed",linewidth = 1,color = "#B83A4B") +
+  scale_x_continuous(limits = c(0,1)) +
+  labs(x = "Jaccard dissimilarity",title = "Maastrichtian") +
+  theme_bw() +
+  theme(aspect.ratio = .5,
+        panel.grid = element_blank(),
+        plot.title = element_text(face = "bold",size = 9),
+        axis.title = element_text(face = "bold",size = 9),
+        axis.text = element_text(size = 9),
+        axis.text.y = element_text(angle = 90,vjust = .5,hjust = .5))
+
+# Campanian
+p17 <-
+  ggplot(mapping = aes(x = value),data = cmp_results$jac) +
+  geom_histogram(color = "#2E2D29") +
+  geom_vline(xintercept = median(cmp_results$jac$value),linetype = "dashed",linewidth = 1,color = "#B83A4B") +
+  scale_x_continuous(limits = c(0,1)) +
+  labs(x = "Jaccard dissimilarity",title = "Campanian") +
+  theme_bw() +
+  theme(aspect.ratio = .5,
+        panel.grid = element_blank(),
+        plot.title = element_text(face = "bold",size = 9),
+        axis.title = element_text(face = "bold",size = 9),
+        axis.text = element_text(size = 9),
+        axis.text.y = element_text(angle = 90,vjust = .5,hjust = .5))
+
+ggarrange(p14,p15,p16,p17,ncol = 1) |> suppressWarnings()
+```
+
+## Visualize results
+
+```{r eval=FALSE}
+# GCD function.
+source("_functions/gcd.R")
+
+# Function.
+matrix_results <- function(x) {
+  x |> 
+  # X-coordinates.
+  left_join(clean_spatial_data |> select(cell,long,lat), by = c("x" = "cell"),relationship = "many-to-many") |> 
+  distinct(x,y,long,lat) |> 
+  rename("x_long" = "long","x_lat" = "lat") |> 
+  # Y-coordinates.
+  left_join(clean_spatial_data |> select(cell,long,lat), by = c("y" = "cell"),relationship = "many-to-many") |> 
+  distinct(x,y,x_long,x_lat,long,lat) |> 
+  # Rename variables.
+  rename("y_long" = "long","y_lat" = "lat") |> 
+  # GCD.
+  mutate(gcd = GreatCircleDistanceFromLongLat(long1 = x_long,lat1 = x_lat,long2 = y_long,lat2 = y_lat)) |> 
+  as.data.frame()
+}
+
+# Count the number occurrences per taxa and cell.
+toc <- function(x) {
+  x |>
+    group_by(cell,Genus) |> 
+    summarise(occs_genera = n(), .groups = 'drop')
+}
+
+# Determine the number of unique cells.
+distinct_cells <- function(data) {
+  tibble(unique(data$cell)) |> setNames(nm = "x") |> 
+  mutate(n_part = as.numeric(sub("F", "", x))) |> 
+  arrange(n_part) |> # arrange from low to high grid-cell value.
+  pull(x)
+}
+
+camp_cells <- distinct_cells(data = toc(x = clean_spatial_data |> filter(Age.3 == "Campanian")))
+mass_cells <- distinct_cells(data = toc(x = clean_spatial_data |> filter(Age.3 == "Maastrichtian")))
+dani_cells <- distinct_cells(data = toc(x = clean_spatial_data |> filter(Age.3 == "DanSelCombined")))
+than_cells <- distinct_cells(data = toc(x = clean_spatial_data |> filter(Age.3 == "Thanetian")))
+
+# Distinct cell pairs.
+cdp <- function(data_x1,data_x2) {
+  expand.grid(data_x1,data_x2,stringsAsFactors = F) |> 
+  setNames(nm = c("x","y")) |> 
+  filter(x<y) |> 
+  as_tibble()
+}
+
+# Cell pairs for each time-bin.
+cmp_dp <- cdp(data_x1 = camp_cells,data_x2 = camp_cells) 
+maa_dp <- cdp(data_x1 = mass_cells,data_x2 = mass_cells) #
+dan_dp <- cdp(data_x1 = dani_cells,data_x2 = dani_cells) #
+tha_dp <- cdp(data_x1 = than_cells,data_x2 = than_cells) #
+
+# Pair-wise cells along with corresponding coordinates and GCD.
+cmp_matrix <- matrix_results(x = cmp_dp)
+mas_matrix <- matrix_results(x = maa_dp)
+dan_matrix <- matrix_results(x = dan_dp)
+tha_matrix <- matrix_results(x = tha_dp)
+
+# Function.
+adjust_matrix <- function(x,y) {
+  x |> 
+  rename("cell_x" = "x","cell_y" = "y") |> 
+  left_join(y,by = c("cell_x","cell_y")) 
+}
+
+# Function.
+add_cutdist <- function(x, new_col = "gcd") {
+  x$cutdist <- cut(x[[new_col]],
+                    breaks = c(0,2000,4000,6000,8000,10000,12000, 
+                               14000,16000,18000,20000), 
+                    labels = c("0","2000","4000","6000","8000", 
+                               "10000","12000","14000","16000","18000"),
+                    include.lowest = TRUE)
+  return(x)
+} # Bin by distance between cells (GCD in km's)
+
+# Compile all results by time into master matrix.
+cmp_species_input <- 
+  adjust_matrix(x = cmp_matrix,y = cmp_results$jac) |> 
+  left_join(cmp_results$jtu |> rename("turnover" = 3),by = c("cell_x","cell_y")) |> 
+  left_join(cmp_results$jne |> rename("nestedness" = 3),by = c("cell_x","cell_y")) |> 
+  add_cutdist(new_col = "gcd")
+
+mas_species_input <- 
+  adjust_matrix(x = mas_matrix,y = mas_results$jac) |> 
+  left_join(mas_results$jtu |> rename("turnover" = 3),by = c("cell_x","cell_y")) |> 
+  left_join(mas_results$jne |> rename("nestedness" = 3),by = c("cell_x","cell_y")) |> 
+  add_cutdist(new_col = "gcd")
+
+dan_species_input <- 
+  adjust_matrix(x = dan_matrix,y = dan_results$jac) |> 
+  left_join(dan_results$jtu |> rename("turnover" = 3),by = c("cell_x","cell_y")) |> 
+  left_join(dan_results$jne |> rename("nestedness" = 3),by = c("cell_x","cell_y")) |> 
+  add_cutdist(new_col = "gcd")
+
+tha_species_input <- 
+  adjust_matrix(x = tha_matrix,y = tha_results$jac) |> 
+  left_join(tha_results$jtu |> rename("turnover" = 3),by = c("cell_x","cell_y")) |> 
+  left_join(tha_results$jne |> rename("nestedness" = 3),by = c("cell_x","cell_y")) |> 
+  add_cutdist(new_col = "gcd")
+```
+
+## Problem with beta diversity
+
+```{r eval = FALSE}
+# Take two well sampled cells that proximate to one another.
+raw_cells <- 
+  clean_spatial_data |> 
+  filter(Age.3 == "Campanian") |> 
+  filter(cell %in% c("F579","F422"))
+
+
+  clean_spatial_data |> 
+  filter(Age.3 == "Campanian") |> 
+  filter(cell %in% c("F579")) |> 
+  group_by(Genus) |> count()
+
+raw_cells |> 
+  group_by(cell) |>
+  summarise(n_distinct(Genus))
+
+# Presence-Absence matrix.
+pa_matrix <- 
+  raw_cells |> 
+  distinct(cell,Genus) |>
+  mutate(presence = 1) |>
+  pivot_wider(names_from = Genus, values_from = presence, values_fill = 0) |>
+  column_to_rownames("cell")
+  
+# Raw beta diversity.
+raw_beta <- beta.pair(x = pa_matrix,index.family = "jaccard")
+raw_beta$beta.jtu # 0.6666667
+
+# Subsample.
+cell_list <-
+  raw_cells |> 
+  group_split(cell_id) # "hats the sample size of each? cell_F579 = 88 and cell_F422 = 94 occurrences.
+
+sample_size <- 30
+samples_F422 <- vector("list", 1000)
+n_repeats <- 1000
+
+set.seed(9)
+for (i in 1:n_repeats) {
+  samples_F422[[i]] <- cell_list[[1]][sample(nrow(cell_list[[1]]), sample_size), ]
+} # 10 random draws for each replicate.
+
+# Second cell.
+samples_F579 <- vector("list", 1000)
+
+for (i in 1:n_repeats) {
+  samples_F579[[i]] <- cell_list[[2]][sample(nrow(cell_list[[2]]), sample_size), ]
+} # 10 random draws for each replicate.
+
+subsampled_lists <- Map(rbind, samples_F422, samples_F579)
+
+# Convert to presence absence matrix.
+pa_matrix_subsampled <- 
+  purrr::map(subsampled_lists, ~ .x |> 
+             distinct(cell,Genus) |>
+             mutate(presence = 1) |>
+             pivot_wider(names_from = Genus, values_from = presence, values_fill = 0) |>
+             as.data.frame() |>
+             column_to_rownames(var = "cell")
+           )
+
+beta_subsampled <- lapply(pa_matrix_subsampled, function(x) { beta.pair(x,index.family = "jaccard")})
+# Plot results.
+layout(matrix(1:1),respect = T)
+hist(unlist(lapply(beta_subsampled, function(x) x$beta.jac)),xlab = "Jaccard dissimilarity", font.lab = 2,
+     main = "Repeated random samples",sub = "Sample Size = 10")
+# 20 random samples.
+hist(unlist(lapply(beta_subsampled, function(x) x$beta.jac)),xlab = "Jaccard dissimilarity", font.lab = 2,xlim = c(0.6666667,1),
+     main = "Repeated random samples",sub = "Sample Size = 20")
+# 30 random samples.
+hist(unlist(lapply(beta_subsampled, function(x) x$beta.jac)),xlab = "Jaccard dissimilarity", font.lab = 2,xlim = c(0.6666667,1),
+     main = "Repeated random samples",sub = "Sample Size = 30")
+abline(v = as.vector(quantile(unlist(lapply(beta_subsampled, function(x) x$beta.jac)), probs=c(.025,.975))), col = "red",lwd = 2)
+points(x = mean(unlist(lapply(beta_subsampled, function(x) x$beta.jac))), col = "red", y = 100, pch = 19, cex = 2)
+# Add raw as arrow.
+abline(v = 0.6666667, col = "blue",lwd = 2)
+
+# Does it improve with increased sampling? No.
+
+```
+
+## Supplementary File
+
+```{r}
+# Final clean-ups of the dataset.
+supplementary_data <- Data
+
+supplementary_data <-
+  supplementary_data |> 
+  select(-c(`Palaeo-Oceanic.Basin`,Standardized.Position))
+```
