@@ -30,4 +30,4 @@ pb_download(file = "default.RData",dest = tempdir(),repo = "mohabazzi/kpg-homoge
 load(file = file.path(tempdir(),"default.RData"))
 ```
 
-[data](/data) contains all data file analysed in this study.
+[_data](/_data) contains all data file analysed in this study.
