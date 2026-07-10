@@ -44,7 +44,7 @@ editor_options:
 
 This Quarto report accompanies the manuscript **Broad-scale biogeographic stability despite mass extinction in sharks across the K/Pg boundary** submitted to the **Proceedings of the Royal Society B: Biological Sciences**. It contains the full R code and analyses used to generate the results in the paper. All analyses were conducted in R version 4.5.3 with Quarto.
 
-**Complete author list:** Mohamad Bazzi, Ashley Prow Fleischer, Mikael Siversson, Jood A. Al Aswad, Jun A. Ebersole and Jonathan L. Payne.
+**Complete author list:** Mohamad Bazzi <a href="https://orcid.org/0000-0002-9495-0781"><img src="./orcid.svg" alt="" height="16"></a>, Ashley Prow Fleischer <a href="https://orcid.org/0000-0003-3371-2453"><img src="./orcid.svg" alt="" height="16"></a>, Mikael Siversson <a href="https://orcid.org/0000-0002-2081-8083"><img src="./orcid.svg" alt="" height="16"></a>, Jood A. Al Aswad <a href="https://orcid.org/0000-0003-4360-7665"><img src="./orcid.svg" alt="" height="16"></a>, Jun A. Ebersole and Jonathan L. Payne <a href="https://orcid.org/0000-0002-9601-3310"><img src="./orcid.svg" alt="" height="16"></a>
 :::
 
 ::: {#call2 .callout-note appearance="simple"}
